@@ -1,0 +1,121 @@
+@import '@loe/ui/styles.css';
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--loe-color-background);
+  color: var(--loe-color-text);
+  font-family: var(--loe-font-family);
+  letter-spacing: var(--loe-letter-spacing);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  background: var(--loe-color-background);
+  border-bottom: 1px solid var(--loe-color-border);
+  backdrop-filter: blur(8px);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--loe-space-lg) 0;
+  gap: var(--loe-space-lg);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--loe-space-sm);
+  font-weight: var(--loe-font-weight-semibold);
+  font-size: var(--loe-font-size-md);
+}
+
+.brand-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--loe-radius-pill);
+  background: linear-gradient(135deg, var(--loe-color-accent), var(--loe-color-accent-warm));
+  box-shadow: 0 6px 16px rgba(184, 204, 255, 0.6);
+}
+
+.nav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--loe-space-sm);
+  background: var(--loe-color-surface);
+  border: 1px solid var(--loe-color-border);
+  border-radius: var(--loe-radius-pill);
+  padding: 6px 10px;
+}
+
+.nav-link {
+  padding: 8px 14px;
+  border-radius: var(--loe-radius-pill);
+  font-size: var(--loe-font-size-sm);
+  font-weight: var(--loe-font-weight-medium);
+  color: var(--loe-color-muted);
+  transition: all 160ms ease;
+}
+
+.nav-link:hover {
+  color: var(--loe-color-text);
+  background: var(--loe-color-accent);
+}
+
+.app-main {
+  flex: 1;
+  padding: var(--loe-space-xxl) 0 var(--loe-space-huge);
+}
+
+.hero {
+  display: grid;
+  gap: var(--loe-space-xl);
+}
+
+.hero h1 {
+  font-size: clamp(2.2rem, 4vw, var(--loe-font-size-display));
+  line-height: var(--loe-line-height-tight);
+  margin: 0;
+}
+
+.hero p {
+  font-size: var(--loe-font-size-md);
+  color: var(--loe-color-muted);
+  margin: 0;
+  max-width: 640px;
+}
+
+.hero-grid {
+  display: grid;
+  gap: var(--loe-space-lg);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.hero-card {
+  background: var(--loe-color-background);
+  border: 1px solid var(--loe-color-border);
+  border-radius: var(--loe-radius-lg);
+  padding: var(--loe-space-lg);
+}
+
+.page-title {
+  font-size: var(--loe-font-size-xl);
+  margin-bottom: var(--loe-space-md);
+}

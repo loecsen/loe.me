@@ -1,0 +1,125 @@
+:root {
+  /* --- Fairy / Ritual Palette --- */
+
+  /* Backgrounds: Deep Soft Cosmic */
+  --loe-bg-cosmic: radial-gradient(circle at 50% 120%, #2e1065 0%, #1e1b4b 50%, #020617 100%);
+  --loe-bg-solid: #0f172a;
+  /* Slate 900 for solid cards */
+  --loe-bg-paper: #f8fafc;
+  /* For "Light" aspirational mode if needed, focusing on dark for now per previous context, but maybe "Fairy" implies light? 
+                             The user said "Soft futuristic, fairy". 
+                             Let's stick to a rich dark purple/blue base but with very bright/soft accents. */
+
+  /* Text */
+  --loe-text-main: #f8fafc;
+  /* Slate 50 */
+  --loe-text-muted: #94a3b8;
+  /* Slate 400 */
+  --loe-text-gold: #fde047;
+  /* Yellow 300 */
+
+  /* Accents */
+  --loe-color-primary: #d8b4fe;
+  /* Lilac / Purple-300 */
+  --loe-color-secondary: #f472b6;
+  /* Soft Pink */
+  --loe-color-gold: #fbbf24;
+  /* Amber-400 */
+  --loe-color-success: #34d399;
+  /* Emerald-400 */
+
+  /* UI Elements */
+  --loe-card-bg: #1e293b;
+  /* Slate 800 */
+  --loe-border: rgba(255, 255, 255, 0.1);
+  --loe-border-gold: rgba(251, 191, 36, 0.3);
+
+  /* Typography */
+  --loe-font-family: 'Outfit', sans-serif;
+  --loe-font-serif: 'Playfair Display', serif;
+  /* Aspirational headers */
+
+  /* Transitions */
+  --loe-transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Global Utilities */
+.bg-cosmic {
+  background: var(--loe-bg-cosmic);
+  color: var(--loe-text-main);
+}
+
+.bg-solid {
+  background: var(--loe-bg-solid);
+}
+
+.text-gold {
+  color: var(--loe-color-gold);
+}
+
+.text-lilac {
+  color: var(--loe-color-primary);
+}
+
+.font-serif {
+  font-family: var(--loe-font-serif);
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom "Magic" Glows */
+.glow-gold {
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
+}
+
+.glow-lilac {
+  filter: drop-shadow(0 0 10px rgba(216, 180, 254, 0.4));
+}
+
+/* Animations */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes sparkle {
+
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Modal/Shell Structure - SOLID, No Transparency */
+.modal-solid {
+  background: var(--loe-bg-solid);
+  border: 1px solid var(--loe-border);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border-radius: 24px;
+}

@@ -1,0 +1,43 @@
+:root {
+  color-scheme: light;
+  --loe-color-background: #ffffff;
+  --loe-color-surface: #f9fafb;
+  --loe-color-text: #1f2937;
+  --loe-color-muted: #6b7280;
+  --loe-color-border: #e5e7eb;
+  --loe-color-accent: #dbe7ff;
+  --loe-color-accent-strong: #b8ccff;
+  --loe-color-accent-warm: #ffe9d6;
+  --loe-color-accent-mint: #dff5ef;
+
+  --loe-radius-xs: 6px;
+  --loe-radius-sm: 10px;
+  --loe-radius-md: 16px;
+  --loe-radius-lg: 24px;
+  --loe-radius-pill: 999px;
+
+  --loe-space-xxs: 4px;
+  --loe-space-xs: 8px;
+  --loe-space-sm: 12px;
+  --loe-space-md: 16px;
+  --loe-space-lg: 24px;
+  --loe-space-xl: 32px;
+  --loe-space-xxl: 48px;
+  --loe-space-huge: 72px;
+
+  --loe-font-family: 'Inter', 'SF Pro Display', -apple-system, system-ui, sans-serif;
+  --loe-font-size-xs: 0.75rem;
+  --loe-font-size-sm: 0.875rem;
+  --loe-font-size-base: 1rem;
+  --loe-font-size-md: 1.125rem;
+  --loe-font-size-lg: 1.5rem;
+  --loe-font-size-xl: 2rem;
+  --loe-font-size-display: 2.75rem;
+  --loe-letter-spacing: -0.01em;
+  --loe-line-height-tight: 1.2;
+  --loe-line-height-normal: 1.5;
+  --loe-line-height-relaxed: 1.7;
+  --loe-font-weight-regular: 400;
+  --loe-font-weight-medium: 500;
+  --loe-font-weight-semibold: 600;
+}
