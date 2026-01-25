@@ -47,3 +47,4 @@ export async function recordProgressEvent(
 
   return { ok: true, progressEvent, ritual: updated };
 }
+

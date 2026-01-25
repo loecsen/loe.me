@@ -59,15 +59,6 @@ type GenerationContext = {
   ritualMode: 'progression' | 'practice' | 'maintenance';
   days: number;
   domainId?: string;
-  previousProgress?: {
-    outcome: 'success' | 'fail' | 'partial' | 'skipped';
-    score?: number;
-    timeSpentMin?: number;
-    notes?: string;
-  };
-  lastEffortTypes?: string[];
-  remediationApplied?: boolean;
-  attemptIndex?: number;
 };
 
 type GenerateBlocksInput = {
@@ -124,10 +115,6 @@ export async function generateMissionBlocks({
     validationMode: context.validationMode,
     ritualMode: context.ritualMode,
     domainId: context.domainId,
-    previousProgress: context.previousProgress,
-    lastEffortTypes: context.lastEffortTypes,
-    remediationApplied: context.remediationApplied,
-    attemptIndex: context.attemptIndex,
   });
   const systemPrompt = system;
   const userPrompt = `${user}\nPrevious mission summary: "${previousMissionSummary ?? 'N/A'}".`;

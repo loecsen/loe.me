@@ -33,9 +33,8 @@ type MissionView = {
     remediationApplied?: boolean;
     progressCount?: number;
     lastEffortTypes?: string[];
-    attemptsCount?: number;
-    attemptIndex?: number;
   };
+  mode?: 'auto' | 'manual' | 'unknown';
   requestedStepId?: string | null;
   manualMismatch?: { requestedStepId: string; returnedStepId?: string };
   progressLabel?: string;
@@ -46,15 +45,14 @@ type MissionEntry = MissionStub & {
   blocks?: MissionFull['blocks'];
   effortType?: string;
   estimatedMinutes?: number;
+  stepId?: string;
 };
 
 type MissionPlayerProps = {
   open: boolean;
   missionView: MissionView | null;
-  remediationHint: string | null;
   onClose: () => void;
   onComplete: (result?: { score?: number }) => void;
-  onFail: () => void;
   onRetry?: () => void;
   onOutcome?: (payload: {
     outcome: 'success' | 'fail' | 'partial' | 'skipped';
@@ -79,10 +77,8 @@ function ensureBlockCount(blocks: PlayerBlock[], noteLabel: string, feedbackText
 export default function MissionPlayer({
   open,
   missionView,
-  remediationHint,
   onClose,
   onComplete,
-  onFail,
   onRetry,
   onOutcome,
   outcomeError,
@@ -91,17 +87,32 @@ export default function MissionPlayer({
   const [note, setNote] = useState('');
   const [savingOutcome, setSavingOutcome] = useState(false);
   const [savedOutcome, setSavedOutcome] = useState(false);
+  const [overrideMission, setOverrideMission] = useState<MissionFull | null>(null);
+  const [localOutcomeError, setLocalOutcomeError] = useState<string | null>(null);
+  const [showRetryPrompt, setShowRetryPrompt] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   const autoFetchRef = useRef(false);
   const { t } = useI18n();
   const searchParams = useSearchParams();
-  const showDebug =
-    process.env.NODE_ENV === 'development' || searchParams.get('debug') === '1';
+  const showDebug = searchParams.get('debug') === '1';
+
+  useEffect(() => {
+    if (missionView?.mission?.id) {
+      setOverrideMission(null);
+      setLocalOutcomeError(null);
+      setShowRetryPrompt(false);
+    }
+  }, [missionView?.mission?.id]);
+
+  const displayedMission = overrideMission ?? missionView?.mission;
+  const displayedStepId = (displayedMission as { stepId?: string } | null)?.stepId;
 
   const blocks = useMemo<PlayerBlock[]>(() => {
-    if (!missionView?.mission) {
+    if (!displayedMission) {
       return [];
     }
-    const sourceBlocks = missionView.mission.blocks ?? [];
+    const sourceBlocks = displayedMission.blocks ?? [];
     if (sourceBlocks.length === 0) {
       return [];
     }
@@ -126,27 +137,27 @@ export default function MissionPlayer({
     });
 
     return ensureBlockCount(mapped, t.playerNoteLabel, t.playerFeedback);
-  }, [missionView?.mission, t.playerFeedback, t.playerNoteLabel]);
+  }, [displayedMission, t.playerFeedback, t.playerNoteLabel]);
 
   useEffect(() => {
-    if (process.env.NODE_ENV === 'production' || !missionView?.mission) {
+    if (process.env.NODE_ENV === 'production' || !displayedMission) {
       return;
     }
     console.log('[MissionPlayer]', {
-      mode: missionView.mode,
-      requestedStepId: missionView.requestedStepId,
-      currentMissionId: missionView.mission?.id,
-      returnedMissionId: missionView.mission?.id,
-      returnedStepId: missionView.mission?.stepId,
+      mode: missionView?.mode ?? 'unknown',
+      requestedStepId: missionView?.requestedStepId ?? null,
+      currentMissionId: displayedMission.id,
+      returnedMissionId: displayedMission.id,
+      returnedStepId: displayedStepId,
     });
-  }, [missionView]);
+  }, [missionView, displayedMission, displayedStepId]);
 
   if (!open) {
     autoFetchRef.current = false;
     return null;
   }
 
-  const missionReady = Boolean(missionView?.mission?.blocks?.length);
+  const missionReady = Boolean(displayedMission?.blocks?.length);
   const isGenerating = missionView?.status === 'generating' || (!missionReady && missionView?.status !== 'error');
   const isError = missionView?.status === 'error';
 
@@ -204,63 +215,7 @@ export default function MissionPlayer({
               {t.playerClose}
             </button>
           </div>
-          {showDebug && missionView?.debugMeta && (
-            <div className="player-block">
-              <small>
-                domain={missionView.debugMeta.domainId} v=
-                {missionView.debugMeta.domainPlaybookVersion} · validation=
-                {missionView.debugMeta.validationMode} · stubs=
-                {missionView.debugMeta.stubsCount} · full=
-                {missionView.debugMeta.fullCount} · plan=
-                {missionView.debugMeta.promptPlan?.promptVersion} (
-                {missionView.debugMeta.promptPlan?.promptHash?.slice(0, 8)}) · full=
-                {missionView.debugMeta.promptFull?.promptVersion} (
-                {missionView.debugMeta.promptFull?.promptHash?.slice(0, 8)}) · planMs=
-                {missionView.debugMeta.promptPlan?.latencyMs} · nextMs=
-                {missionView.debugMeta.promptFull?.latencyMs}
-                {missionView.debugMeta.qualityWarnings?.length
-                  ? ` · warnings=${missionView.debugMeta.qualityWarnings.join(',')}`
-                  : ''}
-                {missionView.debugMeta.axisMapped?.length
-                  ? ` · axisMapped=${missionView.debugMeta.axisMapped.length} (${missionView.debugMeta.axisMapped
-                      .slice(0, 3)
-                      .map((entry) => `${entry.from}→${entry.to}`)
-                      .join(', ')})`
-                  : ''}
-                {missionView.debugMeta.zodIssues
-                  ? ` · zodIssues=${JSON.stringify(missionView.debugMeta.zodIssues).slice(
-                      0,
-                      120,
-                    )}…`
-                  : ''}
-                {missionView.debugMeta.lastOutcome
-                  ? ` · lastOutcome=${missionView.debugMeta.lastOutcome}`
-                  : ''}
-                {typeof missionView.debugMeta.remediationApplied === 'boolean'
-                  ? ` · remediation=${missionView.debugMeta.remediationApplied ? 'yes' : 'no'}`
-                  : ''}
-                {typeof missionView.debugMeta.progressCount === 'number'
-                  ? ` · progressCount=${missionView.debugMeta.progressCount}`
-                  : ''}
-                {missionView.debugMeta.lastEffortTypes?.length
-                  ? ` · lastEffortTypes=${missionView.debugMeta.lastEffortTypes.join(',')}`
-                  : ''}
-                {typeof missionView.debugMeta.attemptsCount === 'number'
-                  ? ` · attempts=${missionView.debugMeta.attemptsCount}`
-                  : ''}
-                {typeof missionView.debugMeta.attemptIndex === 'number'
-                  ? ` · attemptIndex=${missionView.debugMeta.attemptIndex}`
-                  : ''}
-              </small>
-              {missionView.debugMeta.axisMapped?.length ? (
-                <div style={{ marginTop: 6 }}>
-                  <span className="chip chip-pill">
-                    axis mapped: {missionView.debugMeta.axisMapped.length}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          )}
+          {showDebug && missionView?.debugMeta ? null : null}
           <div className="modal-content modal-content-player">
             <div className="player-block player-block-loading">
               {isGenerating ? 'Generating this mission…' : t.missionGenerateError}
@@ -292,13 +247,14 @@ export default function MissionPlayer({
   })();
 
   const handleOutcome = async (outcome: 'success' | 'fail' | 'partial' | 'skipped') => {
-    if (!missionView?.mission) {
+    if (!displayedMission) {
       return;
     }
     if (savingOutcome) {
       return;
     }
     setSavingOutcome(true);
+    setLocalOutcomeError(null);
     try {
       const quizBlock = blocks.find((block) => block.type === 'quiz') as
         | PlayerBlock
@@ -312,8 +268,13 @@ export default function MissionPlayer({
               correct: typeof correctIndex === 'number' ? quizAnswer === correctIndex : undefined,
             }
           : undefined;
+      const normalizedOutcome = outcome === 'partial' ? 'fail' : outcome;
+      if (normalizedOutcome === 'fail') {
+        setShowRetryPrompt(true);
+        return;
+      }
       const ok = await onOutcome?.({
-        outcome,
+        outcome: normalizedOutcome,
         score: typeof score === 'number' ? score / 100 : undefined,
         notes: note.trim() ? note.trim() : undefined,
         quiz,
@@ -321,6 +282,12 @@ export default function MissionPlayer({
       if (ok !== false) {
         setSavedOutcome(true);
         setTimeout(() => setSavedOutcome(false), 1500);
+      }
+      if (normalizedOutcome === 'success') {
+        setShowSuccessToast(true);
+        setShowConfetti(true);
+        setTimeout(() => setShowSuccessToast(false), 1800);
+        setTimeout(() => setShowConfetti(false), 1600);
       }
     } finally {
       setSavingOutcome(false);
@@ -386,10 +353,41 @@ export default function MissionPlayer({
               </strong>
             </div>
           ) : null}
-          {outcomeError ? (
+          {(outcomeError ?? localOutcomeError) ? (
             <div className="player-block">
               <strong>Impossible de générer la tentative suivante.</strong>
-              <div style={{ opacity: 0.8 }}>{outcomeError}</div>
+              <div style={{ opacity: 0.8 }}>{outcomeError ?? localOutcomeError}</div>
+            </div>
+          ) : null}
+          {showSuccessToast ? (
+            <div className="player-block">
+              <strong>Bravo ! Mission du jour est terminée.</strong>
+            </div>
+          ) : null}
+          {showRetryPrompt ? (
+            <div className="player-block">
+              <strong>Dommage. Tu veux réessayer ?</strong>
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setShowRetryPrompt(false);
+                    setQuizAnswer(null);
+                    setNote('');
+                  }}
+                >
+                  Réessayer
+                </button>
+                <button type="button" className="ghost-button" onClick={onClose}>
+                  Fermer
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {showConfetti ? (
+            <div style={{ fontSize: 22, textAlign: 'center', marginBottom: 10 }}>
+              🎉 🎉 🎉
             </div>
           ) : null}
           {blocks.map((block, index) => {
@@ -463,7 +461,6 @@ export default function MissionPlayer({
             }
           })}
 
-          {remediationHint && <div className="remediation">{remediationHint}</div>}
         </div>
 
         <div className="modal-footer modal-footer-player">
@@ -473,7 +470,7 @@ export default function MissionPlayer({
               <button
                 className="primary-button"
                 type="button"
-                disabled={savingOutcome}
+                disabled={savingOutcome || showRetryPrompt}
                 onClick={() => handleOutcome('success')}
               >
                 ✅ Success
@@ -481,15 +478,7 @@ export default function MissionPlayer({
               <button
                 className="secondary-button"
                 type="button"
-                disabled={savingOutcome}
-                onClick={() => handleOutcome('partial')}
-              >
-                ⚠️ Partly
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={savingOutcome}
+                disabled={savingOutcome || showRetryPrompt}
                 onClick={() => handleOutcome('fail')}
               >
                 ❌ Failed
@@ -497,10 +486,10 @@ export default function MissionPlayer({
               <button
                 className="ghost-button"
                 type="button"
-                disabled={savingOutcome}
+                disabled={savingOutcome || showRetryPrompt}
                 onClick={() => handleOutcome('skipped')}
               >
-                ⏭ Skipped
+                ⏭ Skip
               </button>
               {savingOutcome && <span style={{ opacity: 0.6 }}>Saving…</span>}
               {savedOutcome && !savingOutcome && <span style={{ opacity: 0.7 }}>Saved ✓</span>}

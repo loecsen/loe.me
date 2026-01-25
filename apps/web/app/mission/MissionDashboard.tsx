@@ -8,7 +8,6 @@ import {
   createSamplePath_3levels_3_4_3,
   getNextAvailableStep,
   markStepCompleted,
-  markStepFailed,
   markStepStarted,
   recomputeStates,
 } from '@loe/core';
@@ -64,8 +63,6 @@ type MissionData = {
   sourcePath?: LearningPath;
   sourceMissionStubs?: MissionStub[];
   sourceMissionsById?: Record<string, MissionFull>;
-  sourceMissionsByStep?: Record<string, string[]>;
-  sourceStepAttempts?: Record<string, number>;
   lastProgressByMissionId?: Record<string, { outcome: string }>;
   debugMeta?: {
     domainId?: string;
@@ -82,8 +79,6 @@ type MissionData = {
     remediationApplied?: boolean;
     progressCount?: number;
     lastEffortTypes?: string[];
-    attemptsCount?: number;
-    attemptIndex?: number;
   };
 };
 
@@ -134,7 +129,6 @@ export default function MissionDashboard() {
   const [activeStep, setActiveStep] = useState<StepRef>(null);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [remediationHint, setRemediationHint] = useState<string | null>(null);
   const [autoStarted, setAutoStarted] = useState(false);
   const [showReady, setShowReady] = useState(false);
   const [loadingMissions, setLoadingMissions] = useState(false);
@@ -159,6 +153,7 @@ export default function MissionDashboard() {
     'loe.missionData',
     null,
   );
+  const gatingMode = missionData?.sourcePath?.gatingMode ?? 'soft';
   const missionIndexMap = useMemo(() => {
     const map = new Map<string, number>();
     const blueprint = path?.blueprint;
@@ -200,25 +195,22 @@ export default function MissionDashboard() {
     [missions],
   );
 
-  const attemptsByStep = useMemo(() => {
-    if (missionData?.sourceMissionsByStep) {
-      return missionData.sourceMissionsByStep;
+  const getStepOutcome = (stepId: string) => {
+    const level = path.blueprint.levels.find((item) => item.steps.some((step) => step.id === stepId));
+    const step = level?.steps.find((entry) => entry.id === stepId);
+    const missionId = step?.missionId;
+    if (!missionId) {
+      return 'pending';
     }
-    const fallback: Record<string, string[]> = {};
-    path.blueprint.levels.forEach((level) => {
-      level.steps.forEach((step) => {
-        if (step.id && step.missionId) {
-          fallback[step.id] = [step.missionId];
-        }
-      });
-    });
-    return fallback;
-  }, [missionData?.sourceMissionsByStep, path.blueprint.levels]);
-
-  const stepAttempts = useMemo(
-    () => missionData?.sourceStepAttempts ?? {},
-    [missionData?.sourceStepAttempts],
-  );
+    const outcome = lastProgressByMissionId[missionId]?.outcome;
+    if (outcome === 'success') {
+      return 'success';
+    }
+    if (outcome === 'skipped') {
+      return 'skipped';
+    }
+    return 'pending';
+  };
 
   useEffect(() => {
     const shouldStart = searchParams.get('start') === '1';
@@ -407,10 +399,6 @@ export default function MissionDashboard() {
   };
 
   const getMissionIdForStep = (levelId: string, stepId: string) => {
-    const attempts = attemptsByStep[stepId];
-    if (attempts && attempts.length > 0) {
-      return attempts[attempts.length - 1] ?? null;
-    }
     const level = path.blueprint.levels.find((item) => item.id === levelId);
     const step = level?.steps.find((item) => item.id === stepId);
     return step?.missionId ?? null;
@@ -600,6 +588,8 @@ export default function MissionDashboard() {
         }
       }
       const returnedMission = (payload as { data?: { mission?: MissionFull } })?.data?.mission;
+      const returnedDebug = (payload as { data?: { debugMeta?: MissionData['debugMeta'] } })?.data
+        ?.debugMeta;
       if (response.ok && returnedMission) {
         const hasBlocks = Boolean(returnedMission.blocks?.length);
         setActiveMissionId(returnedMission.id);
@@ -622,38 +612,17 @@ export default function MissionDashboard() {
           ...prev,
           [returnedMission.id]: hasBlocks ? 'ready' : 'generating',
         }));
-        setMissionData((prev) => {
-          if (!prev) {
-            return prev;
-          }
-          const stepIdForMission =
-            returnedMission?.stepId ?? getStepIdForMission(missionId);
-          if (!stepIdForMission) {
-            return prev;
-          }
-          const nextMap = { ...(prev.sourceMissionsByStep ?? {}) };
-          const ids = nextMap[stepIdForMission] ?? [];
-          if (!ids.includes(returnedMission.id)) {
-            nextMap[stepIdForMission] = [...ids, returnedMission.id];
-          }
-          const nextAttempts = { ...(prev.sourceStepAttempts ?? {}) };
-          const debugMeta = (payload as { data?: { debugMeta?: MissionData['debugMeta'] } })?.data
-            ?.debugMeta;
-          if (debugMeta?.attemptsCount) {
-            nextAttempts[stepIdForMission] = debugMeta.attemptsCount;
-          }
-          return {
-            ...prev,
-            sourceMissionsByStep: nextMap,
-            sourceStepAttempts: nextAttempts,
-          };
-        });
-        const debugMeta = (payload as { data?: { debugMeta?: MissionData['debugMeta'] } })?.data
-          ?.debugMeta;
+        const debugMeta = returnedDebug;
         if (debugMeta) {
           setMissionData((prev) =>
             prev ? { ...prev, debugMeta: { ...prev.debugMeta, ...debugMeta } } : prev,
           );
+        }
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[MissionDashboard] /next mission', {
+            returnedMissionId: returnedMission.id,
+            returnedStepId: returnedMission.stepId,
+          });
         }
         return returnedMission as MissionFull;
       }
@@ -673,7 +642,6 @@ export default function MissionDashboard() {
     if (process.env.NODE_ENV !== 'production') {
       console.log('[MissionDashboard] click step', { stepId, missionIdSelected: selectedMissionId });
     }
-    setRemediationHint(null);
     setPath((prev) => markStepStarted(prev, levelId, stepId, nowISO()));
     setActiveStep({ levelId, stepId });
     setPlayerOpen(true);
@@ -717,17 +685,6 @@ export default function MissionDashboard() {
     setActiveStep(null);
   };
 
-  const handleFail = () => {
-    if (!activeStep) {
-      return;
-    }
-    setPath((prev) => markStepFailed(prev, activeStep.levelId, activeStep.stepId, nowISO()));
-    setRemediationHint(t.remediationHint);
-    if (ritual) {
-      setRitual({ ...ritual, lastActiveAt: nowISO() });
-    }
-  };
-
   const handleOutcome = async (payload: {
     outcome: 'success' | 'fail' | 'partial' | 'skipped';
     score?: number;
@@ -742,10 +699,14 @@ export default function MissionDashboard() {
     if (!missionId) {
       return false;
     }
+    const outcome = payload.outcome === 'partial' ? 'fail' : payload.outcome;
+    if (outcome === 'fail') {
+      return false;
+    }
     try {
       if (process.env.NODE_ENV !== 'production') {
         console.log('[MissionDashboard] outcome submit', {
-          outcome: payload.outcome,
+          outcome,
           ritualId: ritual.ritualId,
           missionId,
           stepId: activeStep.stepId,
@@ -758,7 +719,7 @@ export default function MissionDashboard() {
           ritualId: ritual.ritualId,
           missionId,
           stepId: activeStep.stepId,
-          outcome: payload.outcome,
+          outcome,
           score: payload.score,
           notes: payload.notes,
           quiz: payload.quiz,
@@ -794,21 +755,15 @@ export default function MissionDashboard() {
     }
 
     let nextStep: { levelId: string; stepId: string } | null = null;
-    if (payload.outcome === 'fail' || payload.outcome === 'partial') {
-      setPath((prev) => {
-        const updated = markStepFailed(prev, activeStep.levelId, activeStep.stepId, nowISO());
-        nextStep = getNextAvailableStep(updated);
-        return updated;
-      });
-      setRemediationHint(t.remediationHint);
-      const mission = await ensureMissionReady(missionId, { mode: 'auto' });
-      if (!mission) {
-        setOutcomeError("Couldn't generate next attempt");
-        return false;
+    if (outcome === 'skipped') {
+      setPlayerOpen(false);
+      setActiveStep(null);
+      if (ritual) {
+        setRitual({ ...ritual, lastActiveAt: nowISO() });
       }
-      setActiveMissionId(mission.id);
       return true;
-    } else {
+    }
+    if (outcome === 'success') {
       setPath((prev) => {
         const updated = markStepCompleted(prev, activeStep.levelId, activeStep.stepId, nowISO(), {
           score: payload.score ? payload.score * 100 : undefined,
@@ -828,8 +783,15 @@ export default function MissionDashboard() {
       }
     }
 
-    setPlayerOpen(false);
-    setActiveStep(null);
+    if (outcome === 'success') {
+      window.setTimeout(() => {
+        setPlayerOpen(false);
+        setActiveStep(null);
+      }, 1200);
+    } else {
+      setPlayerOpen(false);
+      setActiveStep(null);
+    }
     if (ritual) {
       setRitual({ ...ritual, lastActiveAt: nowISO() });
     }
@@ -964,7 +926,13 @@ export default function MissionDashboard() {
                       progressStep.state === 'available' &&
                       nextAvailableStep?.levelId === level.id &&
                       nextAvailableStep?.stepId === step.id;
-                    const isClickable = true;
+                    const stepOutcome = getStepOutcome(step.id);
+                    const isClickable =
+                      gatingMode === 'strict'
+                        ? progressStep.state === 'in_progress' ||
+                          isNextAvailable ||
+                          progressStep.state === 'completed'
+                        : true;
                     return (
                       <button
                         key={step.id}
@@ -978,84 +946,25 @@ export default function MissionDashboard() {
                         </span>
                         <div className="step-text">
                           <span className="step-title">{step.title}</span>
-                          {attemptsByStep[step.id]?.length ? (
-                            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-                              {(() => {
-                                const attempts = attemptsByStep[step.id] ?? [];
-                                const outcomes = attempts
-                                  .map((attemptId) => lastProgressByMissionId[attemptId]?.outcome)
-                                  .filter(Boolean) as string[];
-                                const hasSuccess = outcomes.includes('success');
-                                const hasFailure = outcomes.some(
-                                  (outcome) => outcome === 'fail' || outcome === 'partial',
-                                );
-                                const stepStatus = hasSuccess
-                                  ? 'Validé'
-                                  : hasFailure
-                                    ? 'À retravailler'
-                                    : 'En cours';
-                                const failCount = outcomes.filter(
-                                  (outcome) => outcome === 'fail' || outcome === 'partial',
-                                ).length;
-                                return (
-                                  <>
-                                    <div style={{ fontSize: 12, opacity: 0.85 }}>
-                                      Statut étape : {stepStatus}
-                                    </div>
-                                    {attempts.map((attemptId, index) => {
-                                      const attemptMission = missionsById.get(attemptId);
-                                      const outcome = lastProgressByMissionId[attemptId]?.outcome;
-                                      const statusLabel =
-                                        outcome === 'success'
-                                          ? 'Terminé'
-                                          : outcome === 'fail' || outcome === 'partial'
-                                            ? 'Échoué'
-                                            : outcome === 'skipped'
-                                              ? 'Passé'
-                                              : 'Disponible';
-                                      return (
-                                        <div key={attemptId} style={{ fontSize: 12, opacity: 0.8 }}>
-                                          Tentative {index + 1}:{' '}
-                                          {attemptMission?.title ?? attemptId} · {statusLabel}
-                                        </div>
-                                      );
-                                    })}
-                                    {failCount >= 3 && (
-                                      <div style={{ fontSize: 12, opacity: 0.7 }}>
-                                        Suggestion : Ajuster (plus de temps / autre format)
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          ) : null}
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          className="text-button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openStep(level.id, step.id);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              openStep(level.id, step.id);
-                            }
-                          }}
-                          style={{ marginTop: 6, display: 'inline-block' }}
-                        >
-                          Retravailler
-                        </span>
+                          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                            Statut :{' '}
+                            {stepOutcome === 'success'
+                              ? 'Validé'
+                              : stepOutcome === 'skipped'
+                                ? 'À faire / Skip'
+                                : '—'}
+                          </div>
                         <span className="step-meta">
                           {progressStep.state === 'locked' && t.stateLocked}
                           {progressStep.state === 'available' && t.stateAvailable}
                           {progressStep.state === 'in_progress' && t.stateInProgress}
                           {progressStep.state === 'completed' && t.stateCompleted}
-                            {progressStep.state === 'failed' && t.stateFailed}
+                          {progressStep.state === 'failed' && t.stateFailed}
                         </span>
+                        {stepOutcome === 'success' && <span className="chip chip-pill">Validé</span>}
+                        {stepOutcome === 'skipped' && (
+                          <span className="chip chip-pill">À faire</span>
+                        )}
                         </div>
                         {progressStep.state === 'failed' && <span className="step-warning" />}
                       </button>
@@ -1071,15 +980,12 @@ export default function MissionDashboard() {
       <MissionPlayer
         open={playerOpen}
         missionView={missionView}
-        remediationHint={remediationHint}
         outcomeError={outcomeError}
         onClose={() => {
           setPlayerOpen(false);
           setActiveStep(null);
-          setRemediationHint(null);
         }}
         onComplete={handleComplete}
-        onFail={handleFail}
         onOutcome={handleOutcome}
         onRetry={() => {
           void ensureMissionReady(missionView?.missionId ?? null, {

@@ -43,8 +43,6 @@ export type RitualRecord = RitualIndexItem & {
   pathSource?: unknown;
   missionStubsSource?: unknown[];
   missionsByIdSource?: Record<string, unknown>;
-  missionsByStepSource?: Record<string, string[]>;
-  stepAttemptsSource?: Record<string, number>;
 };
 
 export const RITUAL_INDEX_KEY = 'loe.ritual_index_v1';

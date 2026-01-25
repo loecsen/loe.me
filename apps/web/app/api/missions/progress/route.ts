@@ -13,7 +13,9 @@ type RitualSnapshot = {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as Partial<Payload>;
-  if (!body?.ritualId || !body?.missionId || !body?.stepId || !body?.outcome) {
+  const normalizedOutcome =
+    body?.outcome === 'failed' || body?.outcome === 'partly' ? 'fail' : body?.outcome;
+  if (!body?.ritualId || !body?.missionId || !body?.stepId || !normalizedOutcome) {
     return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
   }
 
@@ -28,11 +30,15 @@ export async function POST(request: Request) {
     );
   }
 
+  if (normalizedOutcome === 'fail') {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
   const result = await recordProgressEvent({
     ritualId: body.ritualId,
     missionId: body.missionId,
     stepId: body.stepId,
-    outcome: body.outcome,
+    outcome: normalizedOutcome as Payload['outcome'],
     score: body.score,
     timeSpentMin: body.timeSpentMin,
     notes: body.notes,

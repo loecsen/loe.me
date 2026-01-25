@@ -10,15 +10,6 @@ type MissionFullPromptInput = {
   validationMode: 'automatic' | 'self_report' | 'presence';
   ritualMode: 'progression' | 'practice' | 'maintenance';
   domainId?: string;
-  previousProgress?: {
-    outcome: 'success' | 'fail' | 'partial' | 'skipped';
-    score?: number;
-    timeSpentMin?: number;
-    notes?: string;
-  };
-  lastEffortTypes?: string[];
-  remediationApplied?: boolean;
-  attemptIndex?: number;
 };
 
 export const MISSION_FULL_PROMPT_VERSION = 'mission_full_v1.1';
@@ -58,10 +49,6 @@ export function buildMissionFullPrompt({
   validationMode,
   ritualMode,
   domainId,
-  previousProgress,
-  lastEffortTypes,
-  remediationApplied,
-  attemptIndex,
 }: MissionFullPromptInput) {
   const system = `You create the content blocks for a single mission.
 
@@ -84,12 +71,6 @@ Constraints:
 - Follow validation mode: ${validationHints[validationMode] ?? validationHints.automatic}
 - Ritual mode: ${ritualMode} (practice/maintenance should feel repeatable and low-friction).
 - Domain guidance: ${domainBlockHints[playbook.id] ?? playbook.profile.intent}
-- ADAPTATION RULES (must follow):
-  - If previous outcome is "fail": remediate same competency, different approach, simpler and more guided (5–7 min).
-  - If previous outcome is "partial": consolidate the same skill with one micro-difficulty.
-  - If previous outcome is "success": progress or consolidate based on axis; avoid repeating effortType if possible.
-  - If previous outcome is "skipped": propose a more accessible alternative (presence/self_report).
-  - Add a 1–2 sentence mini-coaching tone if remediation is applied.
 - Resources are handled at stub level; do not add resources here.
 - Do not repeat any sentence from the mission summary.
 - Keep summary distinct from any other stub summaries.
@@ -98,11 +79,6 @@ Constraints:
   const user = `Goal: "${userGoal}".
 Days: ${days}.
 DomainId: ${domainId ?? playbook.id}.
-Last effort types (most recent first): ${(lastEffortTypes ?? []).join(', ') || 'none'}.
-Previous progress:
-${JSON.stringify(previousProgress ?? null, null, 2)}
-Remediation applied: ${remediationApplied ? 'true' : 'false'}.
-Attempt index: ${attemptIndex ?? 1}.
 Domain playbook:
 ${JSON.stringify(playbook, null, 2)}
 Mission stub:

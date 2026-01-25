@@ -709,22 +709,6 @@ export async function POST(request: Request) {
     path,
     missionStubs: missionStubsWithSteps,
     missionsById,
-    missionsByStep: normalizedLevels.reduce<Record<string, string[]>>((acc, level) => {
-      level.steps.forEach((step) => {
-        if (step.id && step.missionId) {
-          acc[step.id] = [step.missionId];
-        }
-      });
-      return acc;
-    }, {}),
-    stepAttempts: normalizedLevels.reduce<Record<string, number>>((acc, level) => {
-      level.steps.forEach((step) => {
-        if (step.id) {
-          acc[step.id] = 1;
-        }
-      });
-      return acc;
-    }, {}),
     debugMeta: {
       domainId,
       domainPlaybookVersion,

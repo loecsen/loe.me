@@ -384,25 +384,6 @@ export default function RitualPage() {
           },
           {},
         );
-        const missionsByStepSource = data.path.levels.reduce<Record<string, string[]>>(
-          (acc, level) => {
-            level.steps.forEach((step) => {
-              if (step.id && step.missionId) {
-                acc[step.id] = [step.missionId];
-              }
-            });
-            return acc;
-          },
-          {},
-        );
-        const stepAttemptsSource = data.path.levels.reduce<Record<string, number>>((acc, level) => {
-          level.steps.forEach((step) => {
-            if (step.id) {
-              acc[step.id] = 1;
-            }
-          });
-          return acc;
-        }, {});
         const mergedMissions: MissionEntry[] = data.missionStubs.map((stub) => {
           const full = fullMissions.get(stub.id);
           if (full) {
@@ -440,8 +421,6 @@ export default function RitualPage() {
           pathSource: data.path,
           missionStubsSource: data.missionStubs,
           missionsByIdSource,
-          missionsByStepSource,
-          stepAttemptsSource,
           debugMeta: data.debugMeta,
           path: pathState,
           missions: mergedMissions,
@@ -581,6 +560,8 @@ export default function RitualPage() {
 
   const pathTitle = record?.pathTitle ?? '';
   const pathSummary = record?.pathSummary ?? '';
+  const cleanSummary = (value: string) =>
+    value.replace('[[WM_PLAN_V1]]', '').replace(/\s+/g, ' ').trim();
   const missionCount = Array.isArray(record?.missions) ? record?.missions.length : 0;
   const rhythm =
     record?.days && record.days <= 14 ? t.rhythmWeekly3 : t.rhythmWeekly2;
@@ -612,8 +593,6 @@ export default function RitualPage() {
       sourcePath: record.pathSource as LearningPath | undefined,
       sourceMissionStubs: record.missionStubsSource as MissionStub[] | undefined,
       sourceMissionsById: record.missionsByIdSource as Record<string, MissionFull> | undefined,
-      sourceMissionsByStep: record.missionsByStepSource as Record<string, string[]> | undefined,
-      sourceStepAttempts: record.stepAttemptsSource as Record<string, number> | undefined,
     });
     if (typeof window !== 'undefined') {
       try {
@@ -626,8 +605,6 @@ export default function RitualPage() {
             generatedAt: new Date().toISOString(),
             path,
             missions,
-            sourceMissionsByStep: record.missionsByStepSource,
-            sourceStepAttempts: record.stepAttemptsSource,
           }),
         );
       } catch {
@@ -793,7 +770,7 @@ export default function RitualPage() {
                   <div className="skeleton-line skeleton-line-title" />
                 )}
                 {record.status === 'ready' && revealStage >= 2 ? (
-                  <p className="creating-preview-summary">{pathSummary}</p>
+                  <p className="creating-preview-summary">{cleanSummary(pathSummary)}</p>
                 ) : (
                   <div className="skeleton-line skeleton-line-wide" />
                 )}
@@ -830,29 +807,6 @@ export default function RitualPage() {
                         {mission.summary && (
                           <div className="ritual-mission-summary">{mission.summary}</div>
                         )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {record.status === 'ready' && record.missionsByStepSource && (
-              <div className="creating-preview-card">
-                <div className="creating-preview-header">Tentatives par étape</div>
-                <div className="creating-preview-body">
-                  {Object.entries(record.missionsByStepSource).map(([stepId, missionIds]) => (
-                    <div key={stepId} className="ritual-mission-row">
-                      <span className="ritual-mission-dot" aria-hidden="true" />
-                      <div>
-                        <div className="ritual-mission-title">{stepId}</div>
-                        <div className="ritual-mission-summary">
-                          {missionIds.map((missionId, index) => {
-                            const title =
-                              record.missionsByIdSource?.[missionId as keyof typeof record.missionsByIdSource]
-                                ?.title ?? missionId;
-                            return `Tentative ${index + 1}: ${title}`;
-                          }).join(' · ')}
-                        </div>
                       </div>
                     </div>
                   ))}
