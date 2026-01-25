@@ -1,0 +1,45 @@
+{
+  "defaultStyleId": "anime 80s",
+  "styles": [
+    {
+      "id": "fantasy",
+      "version": 1,
+      "prompt": "ethereal fantasy concept art. magnificent, celestial, ethereal, painterly, epic, majestic, magical, fantasy art, cover art, dreamy"
+    },
+    {
+      "id": "figurative painting",
+      "version": 1,
+      "prompt": "    Contemporary figurative painting, large flat color fields, simplified shapes, minimal detail, modern realism, painterly but graphic, spacious, serene atmosphere."
+    },
+    {
+      "id": "manga",
+      "version": 1,
+      "prompt": " type manga"
+    },
+    {
+      "id": "watercolor",
+      "version": 1,
+      "prompt": "Minimal atmospheric watercolor illustration.\nSoft layered watercolor washes with visible paper grain.\nFlat color planes with gentle gradients.\nStrong use of negative space and silence."
+    },
+    {
+      "id": "art deco",
+      "version": 1,
+      "prompt": "Art Nouveau mix with pop art inspired, fine ink outlines, soft watercolor textures, muted pastel palette, flowing lines, high detail, painterly, zest of anime "
+    },
+    {
+      "id": "retro futuristic",
+      "version": 1,
+      "prompt": "Retro-futuristic travel illustration, mid-century modern aesthetic, geometric shapes, flat design with soft gradients, warm pastel palette (peach, mauve, teal), simplified forms, long shadows, cinematic composition, clean vector look, subtle texture grain, editorial poster style, optimistic, graphic, high readability. "
+    },
+    {
+      "id": "flat illustration",
+      "version": 1,
+      "prompt": "Minimalist flat illustration, bold black outlines, simple rounded shapes, naive graphic style, limited pastel color palette (mint, peach, beige), clean composition, subtle humor, everyday life aesthetic, 2D vector look, playful, editorial illustration, modern, airy, strong negative space."
+    },
+    {
+      "id": "anime 80s",
+      "version": 1,
+      "prompt": "80s early 90s aesthetic anime, moebius, highly detailed, sharp attention to detail, extremely detailed, dynamic composition, akira, ghost in the shell"
+    }
+  ]
+}

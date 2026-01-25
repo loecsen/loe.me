@@ -17,3 +17,26 @@ npm run dev
 - `npm run lint` – lint the web app
 - `npm run format` – check formatting
 - `npm run format:write` – format files
+- `npm run purge:data` – purge old file-based data (default 14 days)
+
+Purge with a custom TTL:
+
+```bash
+DATA_TTL_DAYS=30 npm run purge:data
+```
+
+## Mission sanity checklist
+
+- Generation ritual → stubs visibles avec vrais titres (pas “Mission 1”)
+- Clic sur un step sans blocks → “Generating this mission…” puis mission s’ouvre
+- Après “Complete” → préfetch uniquement la suivante (N+1)
+- Reload page `/ritual/[id]` → persistence OK (stubs + missionsById)
+
+## Mission lazy generation
+
+Missions are generated lazily:
+
+- `/api/missions/generate` returns the full path plus only the first mission content.
+- Other missions are returned as stubs (no blocks).
+- `/api/missions/generate-one` fills the blocks for a single mission on demand.
+- The client keeps one mission ahead by preloading the next available mission after completion.

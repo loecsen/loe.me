@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { Container } from '@loe/ui';
+import { headers } from 'next/headers';
+import AppShell from './components/AppShell';
+import { I18nProvider } from './components/I18nProvider';
+import { getLocaleFromAcceptLanguage } from './lib/i18n';
 
 import './globals.css';
 
 export const metadata = {
-  title: 'Loe.me Mission Engine V1',
-  description: 'Calm, premium mission engine scaffolding.',
+  title: 'Loe.me',
+  description: 'Loe.me – une expérience calme, premium et lumineuse.',
 };
 
 type RootLayoutProps = {
@@ -14,33 +16,15 @@ type RootLayoutProps = {
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  const acceptLanguage = headers().get('accept-language');
+  const initialLocale = getLocaleFromAcceptLanguage(acceptLanguage);
+
   return (
-    <html lang="en">
+    <html lang={initialLocale}>
       <body>
-        <div className="app-shell">
-          <header className="app-header">
-            <Container className="header-inner">
-              <div className="brand">
-                <span className="brand-dot" />
-                <span>Mission Engine V1</span>
-              </div>
-              <nav className="nav">
-                <Link className="nav-link" href="/">
-                  Accueil
-                </Link>
-                <Link className="nav-link" href="/mission">
-                  Mission
-                </Link>
-                <Link className="nav-link" href="/demo">
-                  Demo
-                </Link>
-              </nav>
-            </Container>
-          </header>
-          <main className="app-main">
-            <Container>{children}</Container>
-          </main>
-        </div>
+        <I18nProvider initialLocale={initialLocale} acceptLanguage={acceptLanguage}>
+          <AppShell>{children}</AppShell>
+        </I18nProvider>
       </body>
     </html>
   );
