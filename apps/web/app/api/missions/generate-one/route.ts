@@ -102,18 +102,23 @@ Previous mission summary: "${prev ?? 'N/A'}".
 }
 
 export async function POST(request: Request) {
+  const { goal, path, missionStub, previousMissionSummary, locale } = (await request.json()) as Payload;
+  const safeGoal = safeText(goal, 'Progresser avec constance');
+  const headerLocale = getLocaleFromAcceptLanguage(request.headers.get('accept-language'));
+  const resolvedLocale = normalizeLocale(locale ?? headerLocale);
+  console.log('[missions.generate-one] incoming', {
+    intention: safeGoal,
+    days: undefined,
+    locale: resolvedLocale,
+  });
   if (process.env.NODE_ENV !== 'production') {
     console.warn('[missions.generate-one] deprecated: use /api/missions/next');
     return NextResponse.json({ error: 'deprecated' }, { status: 410 });
   }
-  const { goal, path, missionStub, previousMissionSummary, locale } = (await request.json()) as Payload;
   if (!missionStub) {
     return NextResponse.json({ error: 'missing_mission' }, { status: 400 });
   }
 
-  const safeGoal = safeText(goal, 'Progresser avec constance');
-  const headerLocale = getLocaleFromAcceptLanguage(request.headers.get('accept-language'));
-  const resolvedLocale = normalizeLocale(locale ?? headerLocale);
   const rawLocale = locale ?? request.headers.get('accept-language') ?? resolvedLocale;
   const languageTag = rawLocale.split(',')[0]?.trim().split('-')[0] || resolvedLocale;
   const languageName = (() => {

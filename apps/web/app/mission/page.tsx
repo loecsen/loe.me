@@ -7,7 +7,7 @@ import type { LearningPath, LearningPathBlueprintV2, MissionFull, MissionStub } 
 import MissionDashboard from './MissionDashboard';
 import PlanImage from '../components/PlanImage';
 import { useI18n } from '../components/I18nProvider';
-import { buildClarificationSuggestions, needsClarification } from '../lib/domains/clarify';
+import { buildClarificationSuggestions } from '../lib/domains/clarify';
 import { SAFETY_REASON_COPY, SAFETY_CHOICE_LABELS } from '../lib/safety/safetyCopy';
 import { getImageStyle } from '../lib/images/styles';
 import { getSelectedStyleId } from '../lib/images/styleSelection';
@@ -199,12 +199,6 @@ export default function MissionPage() {
         return;
       }
       setPendingRequest(pending);
-      if (!pending.clarification && needsClarification(pending.intention)) {
-        setClarifySuggestions(buildClarificationSuggestions(pending.intention));
-        setClarifyReason('vague');
-        setCreatingStatus('clarify');
-        return;
-      }
       setCreatingStatus('generating');
     } catch {
       router.replace('/');
@@ -474,7 +468,7 @@ export default function MissionPage() {
           <h1>Ton rituel prend forme</h1>
           <p>Tu peux rester ici, on s’occupe du reste.</p>
         </div>
-        {!creatingErrorReason && creationIntro}
+        {creatingStatus === 'generating' && !creatingErrorReason && creationIntro}
         {creatingStatus === 'clarify' && clarifySuggestions ? (
           <div className="clarify-panel">
             <h2>{getClarifyCopy(clarifyReason).title}</h2>

@@ -15,7 +15,7 @@ import { useI18n } from '../../components/I18nProvider';
 import { buildPlanImageKey, requestMissionImage } from '../../lib/images/utils';
 import { getSelectedStyleId } from '../../lib/images/styleSelection';
 import { getImageStyle } from '../../lib/images/styles';
-import { buildClarificationSuggestions, needsClarification } from '../../lib/domains/clarify';
+import { buildClarificationSuggestions } from '../../lib/domains/clarify';
 import { SAFETY_REASON_COPY, SAFETY_CHOICE_LABELS } from '../../lib/safety/safetyCopy';
 import {
   buildRitualLockKey,
@@ -224,11 +224,6 @@ export default function RitualPage() {
         return;
       }
       setPendingRequest(pending);
-      if (!pending.clarification && needsClarification(pending.intention)) {
-        setClarifySuggestions(buildClarificationSuggestions(pending.intention));
-        setClarifyReason('vague');
-        return;
-      }
       const now = new Date().toISOString();
       const draft: RitualRecord = {
         ritualId,

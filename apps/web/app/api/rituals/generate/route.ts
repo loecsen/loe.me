@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getLocaleFromAcceptLanguage, normalizeLocale } from '../../../lib/i18n';
+import { runSafetyGate } from '../../../lib/safety/safetyGate';
 
 type ProposalState = 'realistic' | 'ambitious';
+
+const MAX_CHARS = 350;
 
 const summaryByLocale: Record<string, string> = {
   en: 'A gentle, clear, and steady ritual.',
@@ -91,6 +94,46 @@ export async function POST(request: Request) {
 
   const headerLocale = getLocaleFromAcceptLanguage(request.headers.get('accept-language'));
   const resolvedLocale = normalizeLocale(locale ?? headerLocale);
-  const proposal = createMockProposal(intention, days, resolvedLocale);
+  const rawIntention = typeof intention === 'string' ? intention.trim() : '';
+
+  console.log('[rituals.generate] incoming', {
+    intention: rawIntention,
+    days,
+    locale: resolvedLocale,
+  });
+
+  if (rawIntention.length > MAX_CHARS) {
+    return NextResponse.json({
+      needsClarification: true,
+      reason_code: 'too_long',
+      choices: [],
+      suggestions: [],
+    });
+  }
+
+  const gate = runSafetyGate(rawIntention, resolvedLocale);
+  if (gate.status === 'blocked') {
+    console.log('[rituals.generate] blocked', gate.reasonCode);
+    return NextResponse.json(
+      { error: 'blocked', reason_code: gate.reasonCode },
+      { status: 403 },
+    );
+  }
+  if (gate.status === 'needs_clarification') {
+    return NextResponse.json({
+      needsClarification: true,
+      reason_code: gate.reasonCode,
+      choices: gate.quickChoices,
+      suggestions: gate.quickChoices.map((choice, index) => ({
+        id: `gate-${index + 1}`,
+        title: choice.label_key,
+        subtitle: '',
+        intention: choice.intention,
+        domainHint: 'personal_productivity',
+      })),
+    });
+  }
+
+  const proposal = createMockProposal(rawIntention, days, resolvedLocale);
   return NextResponse.json({ data: proposal });
 }

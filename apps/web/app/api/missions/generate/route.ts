@@ -16,6 +16,9 @@ import { loadOverrides, resolvePlaybooks, validatePlaybooks } from '../../../lib
 import { buildPlanPrompt, PLAN_PROMPT_VERSION } from '../../../lib/prompts/planPrompt';
 import { sha256 } from '../../../lib/storage/fsStore';
 import { enrichIntention, inferDomainContext } from '../../../lib/domains/infer';
+import { buildClarificationSuggestions, needsClarification } from '../../../lib/domains/clarify';
+import { runSafetyGate } from '../../../lib/safety/safetyGate';
+import { runRealismGate } from '../../../lib/realism/realismGate';
 
 type RawPayload = {
   path?: LearningPath & {
@@ -335,31 +338,109 @@ const validatePayload = (payload: RawPayload) => {
 
 export async function POST(request: Request) {
   try {
-    const { intention, days, locale } = (await request.json()) as {
+    const { intention, days, locale, clarification, ritualId: requestedRitualId } =
+      (await request.json()) as {
       intention?: string;
       days?: number;
       locale?: string;
+        ritualId?: string;
+      clarification?: {
+        originalIntention: string;
+        chosenLabel: string;
+        chosenDomainId: string;
+        chosenIntention?: string;
+        createdAt: string;
+      };
     };
 
-  const safeIntention = safeText(intention, 'Apprendre avec constance');
-  const safeDays = typeof days === 'number' && Number.isFinite(days) ? Math.max(days, 7) : 21;
-  const levelsCount = safeDays <= 14 ? 2 : safeDays <= 30 ? 3 : 4;
-  const headerLocale = getLocaleFromAcceptLanguage(request.headers.get('accept-language'));
-  const resolvedLocale = normalizeLocale(locale ?? headerLocale);
-  const rawLocale = locale ?? request.headers.get('accept-language') ?? resolvedLocale;
-  const languageTag = rawLocale.split(',')[0]?.trim().split('-')[0] || resolvedLocale;
-  const languageName = (() => {
-    try {
-      const display = new Intl.DisplayNames(['en'], { type: 'language' });
-      const name = display.of(languageTag);
-      return name ? name.charAt(0).toUpperCase() + name.slice(1) : 'English';
-    } catch {
-      return 'English';
-    }
-  })();
+    const safeDays = typeof days === 'number' && Number.isFinite(days) ? Math.max(days, 7) : 21;
+    const levelsCount = safeDays <= 14 ? 2 : safeDays <= 30 ? 3 : 4;
+    const headerLocale = getLocaleFromAcceptLanguage(request.headers.get('accept-language'));
+    const resolvedLocale = normalizeLocale(locale ?? headerLocale);
+    const rawLocale = locale ?? request.headers.get('accept-language') ?? resolvedLocale;
+    const languageTag = rawLocale.split(',')[0]?.trim().split('-')[0] || resolvedLocale;
+    const languageName = (() => {
+      try {
+        const display = new Intl.DisplayNames(['en'], { type: 'language' });
+        const name = display.of(languageTag);
+        return name ? name.charAt(0).toUpperCase() + name.slice(1) : 'English';
+      } catch {
+        return 'English';
+      }
+    })();
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+    const apiKey = process.env.OPENAI_API_KEY;
+    const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+
+    const rawIntention = typeof intention === 'string' ? intention.trim() : '';
+    console.log('[missions.generate] incoming', {
+      intention: rawIntention,
+      days: safeDays,
+      locale: resolvedLocale,
+    });
+    if (rawIntention.length > 350) {
+      return NextResponse.json({
+        needsClarification: true,
+        reason_code: 'too_long',
+        choices: [],
+      });
+    }
+
+    const gate = runSafetyGate(rawIntention, resolvedLocale);
+    if (gate.status === 'blocked') {
+      return NextResponse.json(
+        { error: 'blocked', reason_code: gate.reasonCode },
+        { status: 403 },
+      );
+    }
+    if (gate.status === 'needs_clarification') {
+      return NextResponse.json({
+        needsClarification: true,
+        reason_code: gate.reasonCode,
+        choices: gate.quickChoices,
+        suggestions: gate.quickChoices.map((choice, index) => ({
+          id: `gate-${index + 1}`,
+          title: choice.label_key,
+          subtitle: '',
+          intention: choice.intention,
+          domainHint: 'personal_productivity',
+        })),
+      });
+    }
+
+    const safeIntention = safeText(gate.cleanIntention ?? rawIntention, 'Apprendre avec constance');
+
+    if (!clarification && needsClarification(safeIntention)) {
+      return NextResponse.json({
+        data: {
+          needsClarification: true,
+          reason_code: 'vague',
+          intention: safeIntention,
+          choices: [],
+          suggestions: buildClarificationSuggestions(safeIntention),
+        },
+      });
+    }
+
+    const realismGate = runRealismGate(
+      safeIntention,
+      typeof days === 'number' && Number.isFinite(days) ? days : undefined,
+      resolvedLocale,
+    );
+    if (realismGate.status === 'needs_reformulation') {
+      return NextResponse.json({
+        needsClarification: true,
+        reason_code: 'unrealistic',
+        choices: realismGate.choices,
+        suggestions: realismGate.choices.map((choice, index) => ({
+          id: `realism-${index + 1}`,
+          title: choice.label_key,
+          subtitle: '',
+          intention: choice.intention,
+          domainHint: 'personal_productivity',
+        })),
+      });
+    }
 
     if (!apiKey) {
       if (process.env.NODE_ENV !== 'production') {
@@ -372,34 +453,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'missing_api_key' }, { status: 500 });
     }
 
-  const overrides = await loadOverrides();
-  const { resolved } = resolvePlaybooks(overrides);
-  const validation = validatePlaybooks(resolved);
-  const playbooks = validation.ok ? resolved : resolvePlaybooks({ playbooks: [] }).resolved;
-  if (!validation.ok && process.env.NODE_ENV !== 'production') {
-    console.warn('[domains] invalid overrides, fallback registry', validation.errors);
-  }
-  const intentionHints = await enrichIntention(safeIntention, resolvedLocale, { apiKey, model });
-  const domainContext = await inferDomainContext(safeIntention, resolvedLocale, {
-    playbooks,
-    llm: { apiKey, model },
-    hints: intentionHints,
-  });
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[missions.generate] intention_hints', intentionHints);
-  }
+    const overrides = await loadOverrides();
+    const { resolved } = resolvePlaybooks(overrides);
+    const validation = validatePlaybooks(resolved);
+    const playbooks = validation.ok ? resolved : resolvePlaybooks({ playbooks: [] }).resolved;
+    if (!validation.ok && process.env.NODE_ENV !== 'production') {
+      console.warn('[domains] invalid overrides, fallback registry', validation.errors);
+    }
+    const intentionForEnrichment = clarification?.originalIntention ?? safeIntention;
+    const clarifiedIntention = clarification?.chosenIntention ?? safeIntention;
+    const intentionHints = await enrichIntention(intentionForEnrichment, resolvedLocale, {
+      apiKey,
+      model,
+    });
+    const domainContext = (() => {
+      if (clarification?.chosenDomainId) {
+        const chosenPlaybook =
+          playbooks.find((entry) => entry.id === clarification.chosenDomainId) ?? playbooks[0];
+        return {
+          domainId: chosenPlaybook.id,
+          domainProfile: chosenPlaybook.profile.label,
+          domainPlaybookVersion: String(chosenPlaybook.version),
+          source: 'clarification' as const,
+        };
+      }
+      return inferDomainContext(intentionForEnrichment, resolvedLocale, {
+        playbooks,
+        llm: { apiKey, model },
+        hints: intentionHints,
+      });
+    })();
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[missions.generate] intention_hints', intentionHints);
+    }
 
   const fetchAttempt = async (attempt: number, stepsPerLevel: number) => {
     const systemHint =
       attempt === 1
         ? `Your last output was rejected because it did not match the schema. RETURN JSON ONLY. Fix JSON shape and required fields. Respond in ${languageName}.`
         : `You are a guide who designs realistic learning missions. Respond in ${languageName}.`;
+    const resolvedDomainContext = await domainContext;
     const { system, user } = buildPlanPrompt({
-      userGoal: safeIntention,
+      userGoal: clarifiedIntention,
+      originalGoal: clarification?.originalIntention,
       days: safeDays,
       userLang: languageName,
       playbooks,
-      domainLock: domainContext,
+      domainLock: resolvedDomainContext,
       goalHint: intentionHints.goalHint,
       contextHint: intentionHints.contextHint,
       validationPreference: intentionHints.validationPreference,
@@ -696,7 +796,10 @@ export async function POST(request: Request) {
     [firstMissionFull.id]: firstMissionFull,
   };
 
-  const ritualId = randomUUID();
+  const ritualId =
+    typeof requestedRitualId === 'string' && requestedRitualId.trim().length > 0
+      ? requestedRitualId.trim()
+      : randomUUID();
   const createdAt = new Date().toISOString();
   const ritualRecord = {
     schemaVersion: 1,
@@ -706,6 +809,7 @@ export async function POST(request: Request) {
     locale: resolvedLocale,
     createdAt,
     updatedAt: createdAt,
+    clarification,
     path,
     missionStubs: missionStubsWithSteps,
     missionsById,
