@@ -15,6 +15,8 @@ import { useI18n } from '../../components/I18nProvider';
 import { buildPlanImageKey, requestMissionImage } from '../../lib/images/utils';
 import { getSelectedStyleId } from '../../lib/images/styleSelection';
 import { getImageStyle } from '../../lib/images/styles';
+import { buildClarificationSuggestions, needsClarification } from '../../lib/domains/clarify';
+import { SAFETY_REASON_COPY, SAFETY_CHOICE_LABELS } from '../../lib/safety/safetyCopy';
 import {
   buildRitualLockKey,
   buildRitualStorageKey,
@@ -49,6 +51,22 @@ type MissionData = {
 type MissionsResponse = {
   ritualId?: string;
   ritualPath?: string;
+  needsClarification?: boolean;
+  reason_code?: string;
+  choices?: Array<{
+    id?: string;
+    label_key?: string;
+    labelKey?: string;
+    label?: string;
+    intention: string;
+  }>;
+  suggestions?: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    intention: string;
+    domainHint: string;
+  }>;
   path: LearningPath & {
     domainId?: string;
     domainProfile?: string;
@@ -59,6 +77,7 @@ type MissionsResponse = {
       stepId: string;
       effortType: string;
       estimatedMinutes: number;
+      dayIndex?: number;
       resources: unknown[];
     }
   >;
@@ -88,6 +107,15 @@ type RitualSnapshot = {
 
 const stepDelaysMs = [0, 380, 760, 1120, 1500];
 const lockTtlMs = 2 * 60 * 1000;
+const PENDING_REQUEST_KEY = 'loe.pending_ritual_request';
+
+type PendingRequest = {
+  ritualId: string;
+  intention: string;
+  days: number;
+  locale?: string;
+  clarification?: RitualRecord['clarification'];
+};
 
 const toLegacyBlueprint = (path: LearningPath): LearningPathBlueprintV2 => ({
   id: path.id,
@@ -112,6 +140,7 @@ export default function RitualPage() {
   const searchParams = useSearchParams();
   const ritualId = typeof params?.id === 'string' ? params.id : '';
   const { t, locale } = useI18n();
+  const isCreating = searchParams.get('creating') === '1';
   const showDebug =
     process.env.NODE_ENV === 'development' || searchParams.get('debug') === '1';
   const [ritualIndex, setRitualIndex] = useLocalStorage<RitualIndexItem[]>(
@@ -127,6 +156,12 @@ export default function RitualPage() {
   const [showAdjust, setShowAdjust] = useState(false);
   const [adjustGoal, setAdjustGoal] = useState('');
   const [adjustDays, setAdjustDays] = useState('');
+  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
+  const [clarifySuggestions, setClarifySuggestions] = useState<
+    ReturnType<typeof buildClarificationSuggestions> | null
+  >(null);
+  const [customClarification, setCustomClarification] = useState('');
+  const [clarifyReason, setClarifyReason] = useState<string | null>(null);
   const inflightRef = useRef(false);
 
   const steps = useMemo(
@@ -153,17 +188,65 @@ export default function RitualPage() {
       }
       const raw = window.localStorage.getItem(buildRitualStorageKey(ritualId));
       if (!raw) {
-        router.replace('/');
+        if (!isCreating) {
+          router.replace('/');
+        }
         return;
       }
       const parsed = JSON.parse(raw) as RitualRecord;
       setRecord(parsed);
       setAdjustGoal(parsed.intention);
       setAdjustDays(String(parsed.days));
+      if (isCreating) {
+        router.replace(`/ritual/${ritualId}`);
+      }
     } catch {
       router.replace('/');
     }
-  }, [ritualId, router]);
+  }, [isCreating, ritualId, router]);
+
+  useEffect(() => {
+    if (!isCreating || !ritualId || typeof window === 'undefined') {
+      return;
+    }
+    if (record || clarifySuggestions) {
+      return;
+    }
+    try {
+      const raw = window.sessionStorage.getItem(PENDING_REQUEST_KEY);
+      if (!raw) {
+        router.replace('/');
+        return;
+      }
+      const pending = JSON.parse(raw) as PendingRequest;
+      if (!pending?.ritualId || pending.ritualId !== ritualId) {
+        router.replace('/');
+        return;
+      }
+      setPendingRequest(pending);
+      if (!pending.clarification && needsClarification(pending.intention)) {
+        setClarifySuggestions(buildClarificationSuggestions(pending.intention));
+        setClarifyReason('vague');
+        return;
+      }
+      const now = new Date().toISOString();
+      const draft: RitualRecord = {
+        ritualId,
+        intention: pending.intention,
+        days: pending.days,
+        status: 'generating',
+        createdAt: now,
+        updatedAt: now,
+        clarification: pending.clarification,
+      };
+      window.localStorage.setItem(buildRitualStorageKey(ritualId), JSON.stringify(draft));
+      setRecord(draft);
+      setAdjustGoal(draft.intention);
+      setAdjustDays(String(draft.days));
+    } catch {
+      router.replace('/');
+    }
+  }, [clarifySuggestions, isCreating, record, ritualId, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,6 +286,7 @@ export default function RitualPage() {
     status: next.status,
     createdAt: next.createdAt,
     updatedAt: next.updatedAt,
+    clarification: next.clarification,
     pathTitle: next.pathTitle,
     pathSummary: next.pathSummary,
     pathDescription: next.pathDescription,
@@ -270,9 +354,11 @@ export default function RitualPage() {
           });
         }
         const requestPayload = {
+          ritualId: record.ritualId,
           intention: record.intention,
           days: record.days,
           locale,
+          clarification: record.clarification,
         };
         const response = await fetch(endpointUrl, {
           method: 'POST',
@@ -330,6 +416,7 @@ export default function RitualPage() {
           const errorPayload = payload as {
             error?: string;
             reason?: string;
+            reason_code?: string;
             validationErrors?: unknown;
           };
           if (process.env.NODE_ENV !== 'production') {
@@ -341,6 +428,7 @@ export default function RitualPage() {
               debugMeta: {
                 error: errorPayload.error,
                 reason: errorPayload.reason,
+                reason_code: errorPayload.reason_code,
                 validationErrors: errorPayload.validationErrors,
                 payload,
                 rawText,
@@ -352,6 +440,67 @@ export default function RitualPage() {
           (payload as { data?: { ritualId?: string } })?.data?.ritualId ??
           (payload as { ritualId?: string })?.ritualId;
         const data = (payload as { data?: MissionsResponse & { ritualPath?: string } })?.data;
+        const payloadRecord = payload as Record<string, unknown> | null;
+        const hasNeedsClarification =
+          !!payloadRecord &&
+          'needsClarification' in payloadRecord &&
+          Boolean(payloadRecord.needsClarification);
+        const clarifyPayload = data?.needsClarification ? data : hasNeedsClarification ? payloadRecord : null;
+        if (clarifyPayload?.needsClarification) {
+          const choices = (clarifyPayload as {
+            choices?: Array<{
+              id?: string;
+              label_key?: string;
+              labelKey?: string;
+              label?: string;
+              intention: string;
+            }>;
+          }).choices;
+          if (choices && choices.length > 0) {
+            setClarifySuggestions(
+              choices.map((choice, index) => {
+                const labelKey =
+                  choice.label_key ||
+                  choice.labelKey ||
+                  (choice.id &&
+                    (SAFETY_CHOICE_LABELS as Record<string, string | undefined>)[choice.id]) ||
+                  '';
+                const label =
+                  (labelKey && getCopy(labelKey)) ||
+                  choice.label ||
+                  choice.intention ||
+                  '';
+                return {
+                  id: choice.id ?? `choice-${index + 1}`,
+                  title: label,
+                  subtitle: '',
+                  intention: choice.intention || label,
+                  domainHint: 'personal_productivity',
+                };
+              }),
+            );
+          } else {
+            if (process.env.NODE_ENV !== 'production') {
+              console.warn('[safety] choices missing, falling back to suggestions');
+            }
+            setClarifySuggestions(
+              (clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
+                .suggestions && (clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
+                .suggestions!.length > 0
+                ? ((clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
+                    .suggestions as ReturnType<typeof buildClarificationSuggestions>)
+                : buildClarificationSuggestions(record.intention),
+            );
+          }
+          setClarifyReason((clarifyPayload as { reason_code?: string }).reason_code ?? 'vague');
+          setRecord(null);
+          try {
+            window.localStorage.removeItem(buildRitualStorageKey(ritualId));
+          } catch {
+            // ignore
+          }
+          return;
+        }
         if (!data?.path || !Array.isArray(data.missionStubs)) {
           if (process.env.NODE_ENV !== 'production') {
             console.error('[client] generate invalid_payload', payload);
@@ -481,6 +630,7 @@ export default function RitualPage() {
         }
         let debugMeta: RitualRecord['debugMeta'];
         let errorDebug: RitualRecord['errorDebug'];
+        let errorCode = 'generation_failed';
         if (error instanceof Error) {
           try {
             const parsed = JSON.parse(error.message) as {
@@ -489,6 +639,9 @@ export default function RitualPage() {
             };
             debugMeta = parsed.debugMeta as RitualRecord['debugMeta'];
             errorDebug = parsed;
+            if (parsed.message) {
+              errorCode = parsed.message;
+            }
           } catch {
             debugMeta = undefined;
             errorDebug = error instanceof Error ? error.message : undefined;
@@ -498,7 +651,7 @@ export default function RitualPage() {
           ...record,
           status: 'error',
           updatedAt: new Date().toISOString(),
-          error: 'generation_failed',
+          error: errorCode,
           debugMeta,
           errorDebug,
         };
@@ -607,6 +760,7 @@ export default function RitualPage() {
             missions,
           }),
         );
+        window.sessionStorage.setItem('loe.active_ritual_id', record.ritualId);
       } catch {
         // ignore write errors
       }
@@ -661,12 +815,168 @@ export default function RitualPage() {
     }
   };
 
+  const formatTitle = (value: string) =>
+    value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Ton rituel';
+
+  const getCopy = (key: string) => (t as unknown as Record<string, string>)[key] ?? key;
+
+  const getClarifyCopy = (reason: string | null) => {
+    const entry =
+      (reason && (SAFETY_REASON_COPY as Record<string, { titleKey: string; bodyKey: string }>)[
+        reason
+      ]) ||
+      SAFETY_REASON_COPY.default;
+    return {
+      title: getCopy(entry.titleKey),
+      body: getCopy(entry.bodyKey),
+    };
+  };
+
+  const handleClarificationSelect = (
+    nextIntention: string,
+    chosenLabel: string,
+    chosenDomainId: string,
+  ) => {
+    if (!pendingRequest || typeof window === 'undefined') {
+      return;
+    }
+    const nextPayload: PendingRequest = {
+      ...pendingRequest,
+      clarification: {
+        originalIntention: pendingRequest.intention,
+        chosenLabel,
+        chosenDomainId,
+        chosenIntention: nextIntention,
+        createdAt: new Date().toISOString(),
+      },
+    };
+    window.sessionStorage.setItem(PENDING_REQUEST_KEY, JSON.stringify(nextPayload));
+    const now = new Date().toISOString();
+    const draft: RitualRecord = {
+      ritualId: pendingRequest.ritualId,
+      intention: pendingRequest.intention,
+      days: pendingRequest.days,
+      status: 'generating',
+      createdAt: now,
+      updatedAt: now,
+      clarification: nextPayload.clarification,
+    };
+    window.localStorage.setItem(buildRitualStorageKey(ritualId), JSON.stringify(draft));
+    setClarifySuggestions(null);
+    setClarifyReason(null);
+    setCustomClarification('');
+    setRecord(draft);
+    setAdjustGoal(draft.intention);
+    setAdjustDays(String(draft.days));
+  };
+
+  const handleClarificationCustom = () => {
+    if (!pendingRequest) return;
+    const trimmed = customClarification.trim();
+    if (!trimmed) return;
+    const next = `${pendingRequest.intention} → ${trimmed}`;
+    handleClarificationSelect(next, 'Autre (je précise en 1 phrase)', 'personal_productivity');
+  };
+
   if (!record) {
+    if (isCreating && clarifySuggestions && pendingRequest) {
+      return (
+        <section className="creating-shell">
+          <div className="creating-hero">
+            <span className="creating-kicker">{t.ritualKicker}</span>
+            <h1>Ton rituel prend forme</h1>
+            <p>On a compris ton objectif, précise-le en un clic avant la création.</p>
+          </div>
+          <div className="creating-preview-card">
+            <div className="creating-preview-header">Titre proposé</div>
+            <h2 className="creating-preview-title">{formatTitle(pendingRequest.intention)}</h2>
+            <p className="creating-preview-summary">Résumé : {pendingRequest.intention}</p>
+          </div>
+          <div className="clarify-panel">
+            <h2>{getClarifyCopy(clarifyReason).title}</h2>
+            <p>{getClarifyCopy(clarifyReason).body}</p>
+            <div className="clarify-grid">
+              {clarifySuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  className="clarify-card"
+                  onClick={() =>
+                    handleClarificationSelect(
+                      suggestion.intention,
+                      suggestion.title,
+                      suggestion.domainHint,
+                    )
+                  }
+                >
+                  <strong>{suggestion.title}</strong>
+                  <span>{suggestion.subtitle}</span>
+                </button>
+              ))}
+            </div>
+            <div className="clarify-other">
+              <label className="input-label" htmlFor="clarify-other-input">
+                {t.clarifyOtherLabel}
+              </label>
+              <input
+                id="clarify-other-input"
+                type="text"
+                value={customClarification}
+                onChange={(event) => setCustomClarification(event.target.value)}
+                placeholder={t.clarifyOtherPlaceholder}
+              />
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!customClarification.trim()}
+                onClick={handleClarificationCustom}
+              >
+                {t.clarifyOtherCta}
+              </button>
+            </div>
+          </div>
+        </section>
+      );
+    }
+    if (isCreating) {
+      return (
+        <section className="creating-shell">
+          <div className="creating-hero">
+            <span className="creating-kicker">{t.ritualKicker}</span>
+            <h1>Ton rituel prend forme</h1>
+            <p>Tu peux rester ici, on s’occupe du reste.</p>
+          </div>
+          <div className="creating-preview-card">
+            <div className="ritual-loading-spinner" />
+          </div>
+        </section>
+      );
+    }
     return null;
+  }
+
+  if (isCreating && record.status !== 'ready') {
+    return (
+      <section className="creating-shell">
+        <div className="creating-hero">
+          <span className="creating-kicker">{t.ritualKicker}</span>
+          <h1>Ton rituel prend forme</h1>
+          <p>Tu peux rester ici, on s’occupe du reste.</p>
+        </div>
+        <div className="creating-preview-card">
+          <div className="ritual-loading-spinner" />
+        </div>
+      </section>
+    );
   }
 
   return (
     <section className="creating-shell">
+      {isCreating && (
+        <div className="ritual-ready">
+          Création en cours…
+        </div>
+      )}
       {showDebug && record?.debugMeta && (
         <div className="creating-preview-card">
           <small>
@@ -711,26 +1021,44 @@ export default function RitualPage() {
 
       {record.status === 'error' && (
         <div className="creating-preview-card">
-          <h2 className="creating-preview-title">{t.ritualErrorTitle}</h2>
-          <p className="creating-preview-summary">{t.ritualErrorBody}</p>
-          {showDebug && record.errorDebug ? (
-            <div style={{ marginTop: 12 }}>
-              <pre className="creating-preview-summary">
-                {JSON.stringify(record.errorDebug, null, 2).slice(0, 1200)}
-              </pre>
-              <button className="secondary-button" type="button" onClick={handleCopyDebug}>
-                Copy debug
-              </button>
-            </div>
-          ) : null}
-          <div className="creating-actions">
-            <button className="primary-button" type="button" onClick={handleRetry}>
-              {t.ritualRetry}
-            </button>
-            <button className="secondary-button" type="button" onClick={() => setShowAdjust(true)}>
-              {t.ritualAdjust}
-            </button>
-          </div>
+          {record.error === 'blocked' || record.debugMeta?.reason_code ? (
+            <>
+              <h2 className="creating-preview-title">{t.safetyGateBlockedTitle}</h2>
+              <p className="creating-preview-summary">{t.safetyGateBlockedBody}</p>
+              <div className="creating-actions">
+                <button className="secondary-button" type="button" onClick={() => router.push('/')}>
+                  {t.safetyGateBack}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="creating-preview-title">{t.ritualErrorTitle}</h2>
+              <p className="creating-preview-summary">{t.ritualErrorBody}</p>
+              {showDebug && record.errorDebug ? (
+                <div style={{ marginTop: 12 }}>
+                  <pre className="creating-preview-summary">
+                    {JSON.stringify(record.errorDebug, null, 2).slice(0, 1200)}
+                  </pre>
+                  <button className="secondary-button" type="button" onClick={handleCopyDebug}>
+                    Copy debug
+                  </button>
+                </div>
+              ) : null}
+              <div className="creating-actions">
+                <button className="primary-button" type="button" onClick={handleRetry}>
+                  {t.ritualRetry}
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setShowAdjust(true)}
+                >
+                  {t.ritualAdjust}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
