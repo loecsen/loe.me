@@ -1,0 +1,221 @@
+/* Pas de framework CSS : modules CSS uniquement. Breakpoints standards (576, 768, 992px). */
+
+ .historyShell {
+   display: grid;
+   gap: 16px;
+   width: 100vw;
+   margin-left: calc(50% - 50vw);
+   box-sizing: border-box;
+ }
+
+ .historyBox {
+   width: 95vw;
+   max-width: 95vw;
+   margin: 0 auto;
+   background: #ffffff;
+   border: 1px solid #eef1f5;
+   border-radius: 10px;
+   padding: 20px 24px;
+   display: grid;
+   gap: 20px;
+   box-shadow: 0 12px 24px rgba(31, 41, 55, 0.05);
+   min-width: 0;
+   box-sizing: border-box;
+ }
+
+ .historyHeader {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+ }
+ 
+ .tabs {
+   display: inline-flex;
+   align-items: center;
+   gap: 6px;
+   padding: 4px;
+   border-radius: 999px;
+   background: #f5f6f9;
+   border: 1px solid #edf0f5;
+ }
+ 
+ .tabButton {
+   border: none;
+   background: transparent;
+   padding: 6px 14px;
+   border-radius: 999px;
+   font-size: 13px;
+   color: #7b8190;
+   font-weight: 500;
+   cursor: pointer;
+   transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+ }
+ 
+ .tabButton:hover {
+   color: #5d6370;
+ }
+ 
+ .tabActive {
+   background: #ffffff;
+   color: #1d2430;
+   box-shadow: 0 8px 18px rgba(31, 41, 55, 0.1);
+ }
+ 
+ .viewAll {
+   border: none;
+   background: none;
+   color: #7b8190;
+   font-size: 13px;
+   font-weight: 500;
+   cursor: pointer;
+   padding: 0;
+ }
+ 
+ .viewAll:hover {
+   color: #5d6370;
+ }
+ 
+ .grid {
+   display: grid;
+   gap: 24px;
+   grid-template-columns: repeat(auto-fill, minmax(260px, 330px));
+   min-width: 0;
+   justify-content: center;
+ }
+
+ .card {
+   background: transparent;
+   border: none;
+   padding: 0;
+   display: grid;
+   gap: 10px;
+   cursor: pointer;
+   transition: transform 160ms ease, opacity 160ms ease;
+   max-width: 330px;
+   min-width: 0;
+   width: 100%;
+ }
+
+ .card:hover {
+   transform: translateY(-1px);
+ }
+
+ .card:focus-visible {
+   outline: 2px solid #c7b7ff;
+   outline-offset: 3px;
+ }
+
+ .thumb {
+   border-radius: 10px;
+   overflow: hidden;
+   background: #f6f3ff;
+   aspect-ratio: 16 / 9;
+   display: grid;
+   max-width: 330px;
+   min-width: 0;
+   width: 100%;
+ }
+
+ .thumbImage {
+   width: 100%;
+   height: 100%;
+   max-width: 100%;
+   object-fit: cover;
+   border-radius: 10px;
+   overflow: hidden;
+ }
+ 
+ .cardBody {
+   display: grid;
+   gap: 6px;
+ }
+ 
+ .title {
+   font-weight: 600;
+   font-size: 14px;
+   color: #1d2430;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+ }
+
+ .meta {
+   color: #9aa2ac;
+   font-size: 12px;
+ }
+
+ .remove {
+   border: none;
+   background: none;
+   color: #9aa2ac;
+   font-size: 12px;
+   font-weight: 500;
+   cursor: pointer;
+   padding: 0;
+   text-align: left;
+ }
+
+ .remove:hover {
+   color: #6f7681;
+ }
+ 
+ .emptyState {
+   border-radius: 10px;
+   border: 1px dashed #e3e7ee;
+   padding: 18px;
+   color: #8a9099;
+   background: #fafbfc;
+ }
+ 
+ .loadMore {
+   border: none;
+   background: #f5f6f9;
+   color: #5d6370;
+   font-size: 13px;
+   padding: 8px 14px;
+   border-radius: 999px;
+   cursor: pointer;
+   justify-self: center;
+ }
+ 
+ .loadMore:hover {
+   background: #eceff4;
+ }
+ 
+ .loadingNote {
+   text-align: center;
+   color: #9aa2ac;
+   font-size: 12px;
+ }
+ 
+/* Breakpoint 992px : 3 colonnes fixes, cartes et images responsive */
+ @media (max-width: 992px) {
+   .grid {
+     grid-template-columns: repeat(3, minmax(0, 1fr));
+   }
+
+   .card,
+   .thumb {
+     max-width: none;
+   }
+ }
+
+/* Breakpoint 768px : 2 colonnes */
+ @media (max-width: 768px) {
+   .grid {
+     grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+ }
+
+/* Breakpoint 576px : 1 colonne, images pleine largeur */
+ @media (max-width: 576px) {
+   .grid {
+     grid-template-columns: 1fr;
+   }
+
+   .card,
+   .thumb {
+     max-width: none;
+   }
+ }

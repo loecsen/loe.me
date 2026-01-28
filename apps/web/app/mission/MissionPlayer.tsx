@@ -48,9 +48,29 @@ type MissionEntry = MissionStub & {
   stepId?: string;
 };
 
+const CONFETTI_PIECES = [
+  { dx: '-140px', dy: '-120px', rot: '120deg', hue: 24 },
+  { dx: '160px', dy: '-110px', rot: '-140deg', hue: 312 },
+  { dx: '-110px', dy: '-60px', rot: '80deg', hue: 186 },
+  { dx: '120px', dy: '-70px', rot: '-60deg', hue: 42 },
+  { dx: '-160px', dy: '30px', rot: '160deg', hue: 280 },
+  { dx: '150px', dy: '40px', rot: '-170deg', hue: 210 },
+  { dx: '-90px', dy: '90px', rot: '30deg', hue: 120 },
+  { dx: '80px', dy: '100px', rot: '-20deg', hue: 18 },
+  { dx: '-40px', dy: '-130px', rot: '200deg', hue: 330 },
+  { dx: '40px', dy: '-140px', rot: '-200deg', hue: 260 },
+  { dx: '-180px', dy: '-10px', rot: '60deg', hue: 70 },
+  { dx: '190px', dy: '-20px', rot: '-40deg', hue: 140 },
+  { dx: '-30px', dy: '140px', rot: '110deg', hue: 300 },
+  { dx: '20px', dy: '150px', rot: '-90deg', hue: 10 },
+  { dx: '-130px', dy: '120px', rot: '15deg', hue: 200 },
+  { dx: '140px', dy: '110px', rot: '-15deg', hue: 88 },
+];
+
 type MissionPlayerProps = {
   open: boolean;
   missionView: MissionView | null;
+  nextMissionTitle?: string | null;
   onClose: () => void;
   onComplete: (result?: { score?: number }) => void;
   onRetry?: () => void;
@@ -77,6 +97,7 @@ function ensureBlockCount(blocks: PlayerBlock[], noteLabel: string, feedbackText
 export default function MissionPlayer({
   open,
   missionView,
+  nextMissionTitle,
   onClose,
   onComplete,
   onRetry,
@@ -92,7 +113,9 @@ export default function MissionPlayer({
   const [showRetryPrompt, setShowRetryPrompt] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [successHeight, setSuccessHeight] = useState<number | null>(null);
   const autoFetchRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const showDebug = searchParams.get('debug') === '1';
@@ -102,6 +125,12 @@ export default function MissionPlayer({
       setOverrideMission(null);
       setLocalOutcomeError(null);
       setShowRetryPrompt(false);
+      setShowSuccessToast(false);
+      setShowConfetti(false);
+      setSavedOutcome(false);
+      setQuizAnswer(null);
+      setNote('');
+      setSuccessHeight(null);
     }
   }, [missionView?.mission?.id]);
 
@@ -284,9 +313,11 @@ export default function MissionPlayer({
         setTimeout(() => setSavedOutcome(false), 1500);
       }
       if (normalizedOutcome === 'success') {
+        if (contentRef.current && successHeight === null) {
+          setSuccessHeight(contentRef.current.getBoundingClientRect().height);
+        }
         setShowSuccessToast(true);
         setShowConfetti(true);
-        setTimeout(() => setShowSuccessToast(false), 1800);
         setTimeout(() => setShowConfetti(false), 1600);
       }
     } finally {
@@ -344,11 +375,19 @@ export default function MissionPlayer({
           </button>
         </div>
 
-        <div className="modal-content modal-content-player">
+        <div
+          className="modal-content modal-content-player"
+          ref={contentRef}
+          style={
+            showSuccessToast
+              ? { minHeight: successHeight ?? undefined, overflow: 'hidden' }
+              : undefined
+          }
+        >
           {showDebug && missionView?.manualMismatch ? (
             <div className="player-block">
               <strong>
-                On reste sur l’étape {missionView.manualMismatch.returnedStepId ?? '—'} car la
+                On reste sur l&apos;étape {missionView.manualMismatch.returnedStepId ?? '—'} car la
                 dernière tentative est en échec. (Ajuster / Continuer)
               </strong>
             </div>
@@ -360,112 +399,137 @@ export default function MissionPlayer({
             </div>
           ) : null}
           {showSuccessToast ? (
-            <div className="player-block">
-              <strong>Bravo ! Mission du jour est terminée.</strong>
-            </div>
-          ) : null}
-          {showRetryPrompt ? (
-            <div className="player-block">
-              <strong>Dommage. Tu veux réessayer ?</strong>
-              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => {
-                    setShowRetryPrompt(false);
-                    setQuizAnswer(null);
-                    setNote('');
-                  }}
-                >
-                  Réessayer
-                </button>
-                <button type="button" className="ghost-button" onClick={onClose}>
+            <div className="player-block confetti-container">
+              <strong>Bravo ! Mission du jour terminée.</strong>
+              <div style={{ marginTop: 6, opacity: 0.8 }}>
+                {nextMissionTitle
+                  ? `La prochaine mission sera : ${nextMissionTitle}`
+                  : 'La prochaine mission sera ta prochaine mission.'}
+              </div>
+              {showConfetti ? (
+                <div className="confetti-burst" aria-hidden="true">
+                  {CONFETTI_PIECES.map((piece, index) => (
+                    <span
+                      key={`confetti-${index}`}
+                      className="confetti-piece"
+                      style={{
+                        ['--dx' as never]: piece.dx,
+                        ['--dy' as never]: piece.dy,
+                        ['--rot' as never]: piece.rot,
+                        ['--hue' as never]: piece.hue,
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              <div style={{ marginTop: 12 }}>
+                <button type="button" className="secondary-button" onClick={onClose}>
                   Fermer
                 </button>
               </div>
             </div>
-          ) : null}
-          {showConfetti ? (
-            <div style={{ fontSize: 22, textAlign: 'center', marginBottom: 10 }}>
-              🎉 🎉 🎉
-            </div>
-          ) : null}
-          {blocks.map((block, index) => {
-            switch (block.type) {
-              case 'context':
-                return (
-                  <div key={index} className="player-block player-block-text">
-                    <p>{block.text}</p>
+          ) : (
+            <>
+              {showRetryPrompt ? (
+                <div className="player-block">
+                  <strong>Dommage. Tu veux réessayer ?</strong>
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        setShowRetryPrompt(false);
+                        setQuizAnswer(null);
+                        setNote('');
+                      }}
+                    >
+                      Réessayer
+                    </button>
+                    <button type="button" className="ghost-button" onClick={onClose}>
+                      Fermer
+                    </button>
                   </div>
-                );
-              case 'quiz':
-                return (
-                  <div key={index} className="player-block">
-                    <h3>{block.question}</h3>
-                    <div className="quiz-options">
-                      {block.choices.map((choice, choiceIndex) => (
-                        <button
-                          key={choice}
-                          className={`quiz-option ${
-                            quizAnswer === choiceIndex ? 'quiz-option-active' : ''
-                          }`}
-                          onClick={() => setQuizAnswer(choiceIndex)}
-                          type="button"
-                        >
-                          {choice}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              case 'input_text':
-                return (
-                  <div key={index} className="player-block">
-                    <label className="input-label" htmlFor="mission-note">
-                      {block.label}
-                    </label>
-                    <textarea
-                      id="mission-note"
-                      value={note}
-                      onChange={(event) => setNote(event.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                );
-              case 'checklist':
-                return (
-                  <div key={index} className="player-block">
-                  <h3>{t.playerChecklist}</h3>
-                    <ul className="checklist">
-                      {block.items.map((item) => (
-                        <li key={item}>• {item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              case 'feedback':
-                return (
-                  <div key={index} className="player-block feedback-block">
-                    {block.text}
-                  </div>
-                );
-              case 'media':
-                return (
-                  <div key={index} className="player-block">
-                    <img src={block.url} alt={block.caption ?? t.playerAlt} />
-                    {block.caption && <p className="media-caption">{block.caption}</p>}
-                  </div>
-                );
-              default:
-                return null;
-            }
-          })}
+                </div>
+              ) : null}
+              {blocks.map((block, index) => {
+                switch (block.type) {
+                  case 'context':
+                    return (
+                      <div key={index} className="player-block player-block-text">
+                        <p>{block.text}</p>
+                      </div>
+                    );
+                  case 'quiz':
+                    return (
+                      <div key={index} className="player-block">
+                        <h3>{block.question}</h3>
+                        <div className="quiz-options">
+                          {block.choices.map((choice, choiceIndex) => (
+                            <button
+                              key={choice}
+                              className={`quiz-option ${
+                                quizAnswer === choiceIndex ? 'quiz-option-active' : ''
+                              }`}
+                              onClick={() => setQuizAnswer(choiceIndex)}
+                              type="button"
+                            >
+                              {choice}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  case 'input_text':
+                    return (
+                      <div key={index} className="player-block">
+                        <label className="input-label" htmlFor="mission-note">
+                          {block.label}
+                        </label>
+                        <textarea
+                          id="mission-note"
+                          value={note}
+                          onChange={(event) => setNote(event.target.value)}
+                          rows={3}
+                        />
+                      </div>
+                    );
+                  case 'checklist':
+                    return (
+                      <div key={index} className="player-block">
+                        <h3>{t.playerChecklist}</h3>
+                        <ul className="checklist">
+                          {block.items.map((item) => (
+                            <li key={item}>• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  case 'feedback':
+                    return (
+                      <div key={index} className="player-block feedback-block">
+                        {block.text}
+                      </div>
+                    );
+                  case 'media':
+                    return (
+                      <div key={index} className="player-block">
+                        <img src={block.url} alt={block.caption ?? t.playerAlt} />
+                        {block.caption && <p className="media-caption">{block.caption}</p>}
+                      </div>
+                    );
+                  default:
+                    return null;
+                }
+              })}
+            </>
+          )}
 
         </div>
 
+        {showSuccessToast ? null : (
         <div className="modal-footer modal-footer-player">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-            <div style={{ fontWeight: 600 }}>Comment ça s'est passé ?</div>
+            <div style={{ fontWeight: 600 }}>Comment ça s&apos;est passé ?</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 className="primary-button"
@@ -496,6 +560,7 @@ export default function MissionPlayer({
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

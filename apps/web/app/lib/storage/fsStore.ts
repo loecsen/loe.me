@@ -45,7 +45,7 @@ export async function writePngFromBase64(dataUrl: string, filePath: string): Pro
   }
   const buffer = Buffer.from(base64, 'base64');
   await ensureDir(path.dirname(filePath));
-  await fs.writeFile(filePath, buffer);
+  await fs.writeFile(filePath, new Uint8Array(buffer));
 }
 
 export async function fileExists(filePath: string): Promise<boolean> {

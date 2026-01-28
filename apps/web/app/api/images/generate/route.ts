@@ -11,7 +11,10 @@ import {
   getDataPath,
 } from '../../../lib/storage/fsStore';
 
+export const runtime = 'nodejs';
+
 const STABILITY_URL = 'https://api.stability.ai/v2beta/stable-image/generate/core';
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const rateLimitMap = new Map<string, number[]>();
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = Number(process.env.OPENAI_IMAGE_RATE_LIMIT_PER_MIN ?? 60);
@@ -23,6 +26,61 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '')
     .slice(0, 60);
+
+const shouldTranslate = (value: string) =>
+  /[^\x00-\x7F]/.test(value) ||
+  /\b(le|la|les|des|en|pour|avec|apprendre|jours|débutant|grammaire|méditation|compétences|professionnelles)\b/i.test(
+    value,
+  );
+
+const translateFields = async ({
+  apiKey,
+  model,
+  title,
+  summary,
+  fallback,
+}: {
+  apiKey: string;
+  model: string;
+  title: string;
+  summary: string;
+  fallback: string;
+}) => {
+  const response = await fetch(OPENAI_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Translate text to concise English. Return ONLY valid JSON with keys: title, summary, fallback.',
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({ title, summary, fallback }),
+        },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const raw = payload?.choices?.[0]?.message?.content?.trim() ?? '';
+  try {
+    return JSON.parse(raw) as { title?: string; summary?: string; fallback?: string };
+  } catch {
+    return null;
+  }
+};
 
 const getRateKey = (request: Request) => {
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
@@ -99,14 +157,39 @@ export async function POST(request: Request) {
     return pickSceneDirection(titleText, summaryText);
   };
 
+  let promptTitle = subjectTitle;
+  let promptSummary = subjectSummary;
+  let promptFallback = fallbackSubject;
+  const shouldTranslatePrompt = [subjectTitle, subjectSummary, fallbackSubject]
+    .filter(Boolean)
+    .some((value) => shouldTranslate(value ?? ''));
+  if (shouldTranslatePrompt) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+    if (apiKey) {
+      const translated = await translateFields({
+        apiKey,
+        model,
+        title: subjectTitle,
+        summary: subjectSummary,
+        fallback: fallbackSubject,
+      });
+      if (translated) {
+        promptTitle = translated.title?.trim() || promptTitle;
+        promptSummary = translated.summary?.trim() || promptSummary;
+        promptFallback = translated.fallback?.trim() || promptFallback;
+      }
+    }
+  }
+
   const subjectBlockParts = [];
-  if (subjectTitle) subjectBlockParts.push(`Title: ${subjectTitle}.`);
-  if (subjectSummary) subjectBlockParts.push(`Summary: ${subjectSummary}.`);
-  if (!subjectTitle && !subjectSummary && fallbackSubject) {
-    subjectBlockParts.push(`Subject: ${fallbackSubject}.`);
+  if (promptTitle) subjectBlockParts.push(`Title: ${promptTitle}.`);
+  if (promptSummary) subjectBlockParts.push(`Summary: ${promptSummary}.`);
+  if (!promptTitle && !promptSummary && promptFallback) {
+    subjectBlockParts.push(`Subject: ${promptFallback}.`);
   }
   const subjectBlock = subjectBlockParts.join(' ');
-  const subjectKeywords = [subjectTitle, subjectSummary, fallbackSubject]
+  const subjectKeywords = [promptTitle, promptSummary, promptFallback]
     .filter(Boolean)
     .join(' | ');
 
@@ -235,7 +318,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-          Accept: 'application/json',
+        Accept: 'application/json',
       },
       body: formData,
       signal: controller.signal,

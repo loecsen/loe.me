@@ -65,7 +65,7 @@ export default function MissionImage({
         summary: summaryText,
         userLang: locale,
       });
-      const resolved = result?.imageUrl ?? result?.imageDataUrl ?? null;
+      const resolved = result?.imageDataUrl ?? result?.imageUrl ?? null;
       if (resolved && isMounted) {
         setImageUrl(resolved);
       }
@@ -90,9 +90,7 @@ export default function MissionImage({
 
   return (
     <div className={`mission-image ${className ?? ''}`}>
-      {imageUrl ? (
-        <img src={imageUrl} alt={title} />
-      ) : (
+      {imageUrl ? null : (
         <div className={`mission-image-placeholder ${loading ? 'is-loading' : ''}`}>
           {loading && <span className="mission-image-badge">Generating artwork…</span>}
           {!loading && blocked && <span className="mission-image-badge">Premium artwork</span>}

@@ -13,6 +13,8 @@ import { buildMissionFull, generateMissionBlocks } from '../../../lib/missions/g
 import type { ProgressEvent as ProgressEventRecord, ProgressEventInput } from '../../../lib/missions/progressTypes';
 import { recordProgressEvent } from '../../../lib/missions/progressStore';
 
+export const runtime = 'nodejs';
+
 type Payload = {
   ritualId?: string;
   stepId?: string;
@@ -150,10 +152,9 @@ export async function POST(request: Request) {
   }
 
   if (progressEvent) {
+    const rawOutcome = progressEvent.outcome as string;
     const normalizedOutcome =
-      progressEvent.outcome === 'failed' || progressEvent.outcome === 'partly'
-        ? 'fail'
-        : progressEvent.outcome;
+      rawOutcome === 'failed' || rawOutcome === 'partly' ? 'fail' : rawOutcome;
     if (normalizedOutcome !== 'fail') {
       const recorded = await recordProgressEvent({
         ritualId,
@@ -204,7 +205,7 @@ export async function POST(request: Request) {
         mission: missionsById[missionId],
         debugMeta: {
           requestedStepId: targetStepId,
-          returnedStepId: missionsById[missionId].stepId,
+          returnedStepId: targetStepId,
         },
       },
     });
@@ -214,8 +215,9 @@ export async function POST(request: Request) {
   const { resolved } = resolvePlaybooks(overrides);
   const validation = validatePlaybooks(resolved);
   const playbooks = validation.ok ? resolved : resolvePlaybooks({ playbooks: [] }).resolved;
+  const pathWithDomain = ritual.path as LearningPath & { domainId?: string };
   const playbook =
-    playbooks.find((entry) => entry.id === ritual.path.domainId) ?? playbooks[0];
+    playbooks.find((entry) => entry.id === pathWithDomain.domainId) ?? playbooks[0];
 
   const { blocks, meta } = await generateMissionBlocks({
     request,
@@ -230,28 +232,25 @@ export async function POST(request: Request) {
       validationMode: ritual.path.validationMode,
       ritualMode: ritual.path.ritualMode,
       days: ritual.days,
-      domainId: ritual.path.domainId,
-      previousProgress: undefined,
-      lastEffortTypes: undefined,
-      remediationApplied: false,
-      attemptIndex: 1,
+      domainId: pathWithDomain.domainId,
     },
   });
+  const stubWithEffort = stub as MissionStub & { effortType?: string; estimatedMinutes?: number };
   const normalizedEffortType = playbook.allowedEffortTypes.includes(
-    (stub.effortType ?? '') as (typeof playbook.allowedEffortTypes)[number],
+    (stubWithEffort.effortType ?? '') as (typeof playbook.allowedEffortTypes)[number],
   )
-    ? stub.effortType
+    ? stubWithEffort.effortType
     : playbook.allowedEffortTypes[0];
   const normalizedStub = {
     ...stub,
     effortType: normalizedEffortType,
-    estimatedMinutes: clampMinutes(stub.estimatedMinutes),
+    estimatedMinutes: clampMinutes(stubWithEffort.estimatedMinutes),
   };
   const normalizedBlocks = ensureValidationBlocks(
     blocks as Array<{ type: string }>,
     ritual.path.validationMode,
-  );
-  const fullMission = buildMissionFull(normalizedStub, normalizedBlocks as MissionFull['blocks']);
+  ) as unknown as Parameters<typeof buildMissionFull>[1];
+  const fullMission = buildMissionFull(normalizedStub, normalizedBlocks);
   missionsById[normalizedStub.id] = fullMission;
   const updated = {
     ...ritual,
@@ -262,7 +261,7 @@ export async function POST(request: Request) {
       promptFull: meta,
       fullCount: Object.keys(missionsById).length,
       requestedStepId: targetStepId,
-      returnedStepId: fullMission.stepId,
+      returnedStepId: targetStepId,
     },
   };
   await writeJsonAtomic(ritualPath, updated);
@@ -285,7 +284,7 @@ export async function POST(request: Request) {
         promptFull: meta,
         fullCount: Object.keys(missionsById).length,
         requestedStepId: targetStepId,
-        returnedStepId: fullMission.stepId,
+        returnedStepId: targetStepId,
       },
     },
   });

@@ -2,8 +2,15 @@ import { NextResponse } from 'next/server';
 import nodePath from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getLocaleFromAcceptLanguage, normalizeLocale } from '../../../lib/i18n';
-import type { LearningPath, MissionFull, MissionStub } from '@loe/core';
-import { LearningPathSchema, MissionStubSchema, validateLearningPath, validateMissionStub } from '@loe/core';
+import type { LearningPath, MissionFull, MissionStub, TraceEvent } from '@loe/core';
+import {
+  LearningPathSchema,
+  MissionStubSchema,
+  runSafetyV2,
+  pushTrace,
+  validateLearningPath,
+  validateMissionStub,
+} from '@loe/core';
 import {
   appendNdjson,
   writeJsonAtomic,
@@ -18,7 +25,10 @@ import { sha256 } from '../../../lib/storage/fsStore';
 import { enrichIntention, inferDomainContext } from '../../../lib/domains/infer';
 import { buildClarificationSuggestions, needsClarification } from '../../../lib/domains/clarify';
 import { runSafetyGate } from '../../../lib/safety/safetyGate';
+import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
 import { runRealismGate } from '../../../lib/realism/realismGate';
+
+export const runtime = 'nodejs';
 
 type RawPayload = {
   path?: LearningPath & {
@@ -89,7 +99,7 @@ const DUPLICATION_ERRORS = new Set([
   'duplicate_stub_sentence',
 ]);
 
-export const axisFromEffort = (value: string) => {
+const axisFromEffort = (value: string) => {
   const lower = value.toLowerCase();
   if (['read', 'listen', 'vocabulary', 'grammar'].some((key) => lower.includes(key))) {
     return 'understand';
@@ -106,7 +116,7 @@ export const axisFromEffort = (value: string) => {
   return 'understand';
 };
 
-export const normalizeParsedPayload = (payload: RawPayload) => {
+const normalizeParsedPayload = (payload: RawPayload) => {
   const axisMappings: Array<{ from: string; to: string }> = [];
   if (payload.path && 'pathId' in payload.path && !payload.path.id) {
     payload.path.id = (payload.path as { pathId?: string }).pathId ?? payload.path.id;
@@ -252,7 +262,7 @@ const validatePayload = (payload: RawPayload) => {
       errors: pathSchemaResult.error.issues.map((issue) => issue.message),
       zodIssues: buildIssueReport(
         pathSchemaResult.error.issues.map((issue) => ({
-          path: issue.path,
+          path: issue.path.map((part) => (typeof part === 'symbol' ? String(part) : part)),
           expected: (issue as { expected?: string }).expected,
           received: (issue as { received?: string }).received,
           message: issue.message,
@@ -277,12 +287,12 @@ const validatePayload = (payload: RawPayload) => {
       url: safeText(resource.url, ''),
       whyThis: safeText(resource.reason, 'User provided resource'),
     }));
-  for (const stub of missionStubs) {
+  for (const [index, stub] of missionStubs.entries()) {
     if (
-      stub.resources?.some(
-        (resource) =>
-          resource.provider && !['loecsen', 'userProvided'].includes(resource.provider),
-      )
+      stub.resources?.some((resource) => {
+        const provider = (resource as { provider?: string }).provider;
+        return provider && !['loecsen', 'userProvided'].includes(provider);
+      })
     ) {
       return { ok: false, errors: ['invalid_resource_provider'] };
     }
@@ -303,7 +313,7 @@ const validatePayload = (payload: RawPayload) => {
         errors: stubErrors,
         zodIssues: buildIssueReport(
           schemaResult.error.issues.map((issue) => ({
-            path: issue.path,
+            path: issue.path.map((part) => (typeof part === 'symbol' ? String(part) : part)),
             expected: (issue as { expected?: string }).expected,
             received: (issue as { received?: string }).received,
             message: issue.message,
@@ -386,14 +396,41 @@ export async function POST(request: Request) {
       });
     }
 
-    const gate = runSafetyGate(rawIntention, resolvedLocale);
-    if (gate.status === 'blocked') {
+    const debugEnabled = process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production';
+    const trace: TraceEvent[] | undefined = debugEnabled ? [] : undefined;
+
+    const { guard: lexiconGuard } = await getLexiconGuard();
+    const safetyVerdict = await runSafetyV2({
+      text: rawIntention,
+      locale: resolvedLocale,
+      lexiconGuard,
+      trace,
+    });
+    if (safetyVerdict.status === 'blocked') {
+      if (debugEnabled) {
+        console.warn('[safety] blocked', {
+          reason_code: safetyVerdict.reason_code,
+          intentionExcerpt: rawIntention.slice(0, 120),
+        });
+      }
       return NextResponse.json(
-        { error: 'blocked', reason_code: gate.reasonCode },
-        { status: 403 },
+        {
+          blocked: true,
+          reason_code: safetyVerdict.reason_code,
+          ...(debugEnabled ? { debugTrace: trace } : {}),
+        },
+        { status: 400 },
       );
     }
+
+    const gate = runSafetyGate(rawIntention, resolvedLocale);
     if (gate.status === 'needs_clarification') {
+      pushTrace(trace, {
+        gate: 'clarification_v1',
+        outcome: 'needs_clarification',
+        reason_code: gate.reasonCode,
+        meta: { source: 'safety_gate' },
+      });
       return NextResponse.json({
         needsClarification: true,
         reason_code: gate.reasonCode,
@@ -405,12 +442,19 @@ export async function POST(request: Request) {
           intention: choice.intention,
           domainHint: 'personal_productivity',
         })),
+        ...(debugEnabled ? { debugTrace: trace } : {}),
       });
     }
 
     const safeIntention = safeText(gate.cleanIntention ?? rawIntention, 'Apprendre avec constance');
 
     if (!clarification && needsClarification(safeIntention)) {
+      pushTrace(trace, {
+        gate: 'clarification_v1',
+        outcome: 'needs_clarification',
+        reason_code: 'vague',
+        meta: { source: 'heuristic' },
+      });
       return NextResponse.json({
         data: {
           needsClarification: true,
@@ -419,8 +463,13 @@ export async function POST(request: Request) {
           choices: [],
           suggestions: buildClarificationSuggestions(safeIntention),
         },
+        ...(debugEnabled ? { debugTrace: trace } : {}),
       });
     }
+    pushTrace(trace, {
+      gate: 'clarification_v1',
+      outcome: 'ok',
+    });
 
     const realismGate = runRealismGate(
       safeIntention,
@@ -428,6 +477,12 @@ export async function POST(request: Request) {
       resolvedLocale,
     );
     if (realismGate.status === 'needs_reformulation') {
+      pushTrace(trace, {
+        gate: 'realism_gate',
+        outcome: 'needs_clarification',
+        reason_code: 'unrealistic',
+        meta: { choices: realismGate.choices.map((choice) => choice.label_key) },
+      });
       return NextResponse.json({
         needsClarification: true,
         reason_code: 'unrealistic',
@@ -439,8 +494,13 @@ export async function POST(request: Request) {
           intention: choice.intention,
           domainHint: 'personal_productivity',
         })),
+        ...(debugEnabled ? { debugTrace: trace } : {}),
       });
     }
+    pushTrace(trace, {
+      gate: 'realism_gate',
+      outcome: 'ok',
+    });
 
     if (!apiKey) {
       if (process.env.NODE_ENV !== 'production') {
@@ -686,26 +746,32 @@ export async function POST(request: Request) {
   }
 
   const pathData = parsed.path;
-  const domainId = domainContext.domainId;
-  const domainProfile = domainContext.domainProfile;
-  const domainPlaybookVersion = domainContext.domainPlaybookVersion;
+  const pathDomain = pathData as LearningPath & {
+    domainId?: string;
+    domainProfile?: string;
+    domainPlaybookVersion?: string;
+  };
+  const resolvedDomainContext = await domainContext;
+  const domainId = resolvedDomainContext.domainId;
+  const domainProfile = resolvedDomainContext.domainProfile;
+  const domainPlaybookVersion = resolvedDomainContext.domainPlaybookVersion;
   const domainAutofilled =
-    pathData.domainId !== domainId ||
-    pathData.domainProfile !== domainProfile ||
-    pathData.domainPlaybookVersion !== domainPlaybookVersion;
+    pathDomain.domainId !== domainId ||
+    pathDomain.domainProfile !== domainProfile ||
+    pathDomain.domainPlaybookVersion !== domainPlaybookVersion;
   if (domainAutofilled && process.env.NODE_ENV !== 'production') {
     console.warn('[missions.generate] domain_autofilled', {
       from: {
-        domainId: pathData.domainId,
-        domainProfile: pathData.domainProfile,
-        domainPlaybookVersion: pathData.domainPlaybookVersion,
+        domainId: pathDomain.domainId,
+        domainProfile: pathDomain.domainProfile,
+        domainPlaybookVersion: pathDomain.domainPlaybookVersion,
       },
       to: {
         domainId,
         domainProfile,
         domainPlaybookVersion,
       },
-      source: domainContext.source,
+      source: resolvedDomainContext.source,
     });
   }
   const pathId = slugify(pathData.pathTitle ?? `rituel-${safeIntention}`) || 'loe-path-ai';
@@ -733,7 +799,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid_competency' }, { status: 400 });
   }
   const flatSteps = normalizedLevels.flatMap((level) => level.steps);
-  const rawStubs = parsed.missionStubs;
+  const rawStubs = parsed.missionStubs as Array<
+    MissionStub & {
+      stepId?: string;
+      effortType?: string;
+      estimatedMinutes?: number;
+      dayIndex?: number;
+      order?: number;
+      levelIndex?: number;
+      stepIndex?: number;
+      resources?: Array<{ provider?: string; title?: string; url?: string; reason?: string }>;
+      uniqueAngle?: string;
+      actionVerb?: string;
+    }
+  >;
   const missionStubsWithSteps = missionStubs.map((stub, index) => {
     const {
       durationMin,
@@ -760,7 +839,11 @@ export async function POST(request: Request) {
       stepIndex: rawStubs[index]?.stepIndex ?? index + 1,
     };
   });
-  const path: LearningPath = {
+  const path: LearningPath & {
+    domainId?: string;
+    domainProfile?: string;
+    domainPlaybookVersion?: string;
+  } = {
     ...pathData,
     id: pathId,
     pathTitle: safeText(pathData.pathTitle, `Rituel ${safeIntention}`),
@@ -774,9 +857,9 @@ export async function POST(request: Request) {
   const playbook = playbooks.find((entry) => entry.id === domainId) ?? playbooks[0];
 
   const firstStub = {
-    ...(missionStubsWithSteps[0] as MissionStub),
+    ...missionStubsWithSteps[0],
     durationMin: missionStubsWithSteps[0]?.estimatedMinutes ?? 10,
-  } as MissionStub;
+  } as unknown as MissionStub;
   const { blocks, meta: fullMeta } = await generateMissionBlocks({
     request,
     goal: safeIntention,
@@ -845,6 +928,10 @@ export async function POST(request: Request) {
     intention: safeIntention,
     days: safeDays,
     createdAt,
+    updatedAt: createdAt,
+    lastViewedAt: createdAt,
+    status: 'ready',
+    createdBy: null,
     pathTitle: path.pathTitle,
     pathSummary: path.pathSummary,
   });
@@ -866,27 +953,28 @@ export async function POST(request: Request) {
       firstFullId: firstMissionFull.id,
     });
   }
-    return NextResponse.json({
-      data: {
-        ritualId,
-        ritualPath: process.env.NODE_ENV !== 'production' ? ritualPath : undefined,
-        path,
-        missionStubs: missionStubsWithSteps,
-        missions: [firstMissionFull],
-        debugMeta: {
-          domainId,
-          domainPlaybookVersion,
-          validationMode: path.validationMode,
-          promptPlan: planMeta,
-          promptFull: fullMeta,
-          stubsCount: missionStubsWithSteps.length,
-          fullCount: 1,
-          qualityWarnings: planWarnings,
-          zodIssues,
-          axisMapped: axisMappings,
-        },
+  return NextResponse.json({
+    data: {
+      ritualId,
+      ritualPath: process.env.NODE_ENV !== 'production' ? ritualPath : undefined,
+      path,
+      missionStubs: missionStubsWithSteps,
+      missions: [firstMissionFull],
+      debugMeta: {
+        domainId,
+        domainPlaybookVersion,
+        validationMode: path.validationMode,
+        promptPlan: planMeta,
+        promptFull: fullMeta,
+        stubsCount: missionStubsWithSteps.length,
+        fullCount: 1,
+        qualityWarnings: planWarnings,
+        zodIssues,
+        axisMapped: axisMappings,
       },
-    });
+    },
+    ...(debugEnabled ? { debugTrace: trace } : {}),
+  });
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
     if (process.env.NODE_ENV !== 'production') {

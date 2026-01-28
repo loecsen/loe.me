@@ -1,42 +1,71 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useLocalStorage } from './hooks/useLocalStorage';
+import { useRouter } from 'next/navigation';
+import { Button } from '@loe/ui';
 import { useI18n } from './components/I18nProvider';
-import PlanImage from './components/PlanImage';
-import {
-  buildRitualStorageKey,
-  RITUAL_INDEX_KEY,
-  type RitualIndexItem,
-  type RitualRecord,
-} from './lib/rituals/inProgress';
+import RitualHistory from './components/RitualHistory';
+import styles from './page.module.css';
 
-const dayOptions = [7, 14, 21, 30, 60, 90] as const;
+const dayOptions = [7, 14, 30, 60, 90] as const;
+const dayStages: Record<number, { icon: string; label: string }> = {
+  7: { icon: '🌱', label: 'Discovery' },
+  14: { icon: '🌿', label: 'Foundations' },
+  30: { icon: '🌳', label: 'Real progress' },
+  60: { icon: '🌲', label: 'Solid level' },
+  90: { icon: '🏔️', label: 'Strong autonomy' },
+};
+
+const getNearestDayOption = (value: number) => {
+  return dayOptions.reduce((closest, option) =>
+    Math.abs(option - value) < Math.abs(closest - value) ? option : closest,
+  );
+};
 
 export default function HomePage() {
   const router = useRouter();
-  const { t } = useI18n();
-  const searchParams = useSearchParams();
-  const showDebug =
-    process.env.NODE_ENV === 'development' || searchParams.get('debug') === '1';
+  const { t, locale } = useI18n();
   const [intention, setIntention] = useState('');
   const [selectedDays, setSelectedDays] = useState<number | null>(14);
-  const [customDays, setCustomDays] = useState('');
-  const [ritualIndex, setRitualIndex, ritualsReady] = useLocalStorage<RitualIndexItem[]>(
-    RITUAL_INDEX_KEY,
-    [],
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const isFrench = locale?.startsWith('fr');
+  const placeholderText = useMemo(
+    () =>
+      isFrench
+        ? [
+            'Parler italien au restaurant',
+            'Créer une routine de concentration',
+            'Me préparer à un entretien en anglais',
+          ].join('\n')
+        : [
+            'Speak Italian at a restaurant',
+            'Build a focus routine',
+            'Prepare for an English interview',
+          ].join('\n'),
+    [isFrench],
   );
 
-  const placeholderText = useMemo(() => t.placeholders.join('\n'), [t.placeholders]);
+  const finalDays = useMemo(() => selectedDays ?? 14, [selectedDays]);
+  const activeDayOption = useMemo(() => getNearestDayOption(finalDays), [finalDays]);
+  const dayStage = dayStages[activeDayOption] ?? { icon: '🌿', label: 'Foundations' };
+  const sliderProgress = (finalDays - 7) / (90 - 7);
+  const intentionTitle = isFrench
+    ? 'Que voulez-vous apprendre ou améliorer ?'
+    : 'What do you want to learn or progress on?';
+  const daysTitle = isFrench
+    ? 'Combien de jours avez-vous pour atteindre votre objectif ?'
+    : 'How many days do you have to reach your goal?';
+  const helperCopy = isFrench
+    ? 'Ajoutez vos documents (optionnel). Nous pouvons bâtir le parcours à partir de vos contenus.'
+    : 'Add your documents (optional). We can build your learning path from your own materials.';
+  const addDocsCopy = isFrench ? '+ Ajouter des documents' : '+ Add documents';
+  const aiBadgeCopy = isFrench ? '✨ Guidé par IA' : '✨ AI-powered';
+  const daysUnitCopy = isFrench ? 'jours' : 'days';
+  const ctaCopy = isFrench ? 'Créer mon parcours →' : 'Create my learning path →';
 
-  const finalDays = useMemo(() => {
-    const parsed = Number(customDays);
-    if (customDays && !Number.isNaN(parsed)) {
-      return parsed;
-    }
-    return selectedDays ?? 14;
-  }, [customDays, selectedDays]);
+  const PENDING_REQUEST_KEY = 'loe.pending_ritual_request';
 
   const createRitualId = () => {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -45,255 +74,182 @@ export default function HomePage() {
     return `ritual_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   };
 
+  const storePendingRequest = (payload: {
+    ritualId: string;
+    intention: string;
+    days: number;
+    locale?: string;
+    clarification?: {
+      originalIntention: string;
+      chosenLabel: string;
+      chosenDomainId: string;
+      createdAt: string;
+    };
+  }) => {
+    if (typeof window === 'undefined') return false;
+    try {
+      window.sessionStorage.setItem(PENDING_REQUEST_KEY, JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!intention.trim()) {
+    if (!intention.trim() || isSubmitting) {
       return;
     }
+    setIsSubmitting(true);
+    setSubmitError(null);
     const ritualId = createRitualId();
-    const now = new Date().toISOString();
-    const record: RitualRecord = {
+    const ok = storePendingRequest({
       ritualId,
       intention: intention.trim(),
       days: finalDays,
-      status: 'generating',
-      createdAt: now,
-      updatedAt: now,
-    };
-    setRitualIndex((prev) => [record, ...prev]);
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.setItem(buildRitualStorageKey(ritualId), JSON.stringify(record));
-      } catch {
-        // ignore write errors
-      }
+      locale,
+    });
+    setIsSubmitting(false);
+    if (!ok) {
+      setSubmitError('Impossible de lancer la génération.');
+      return;
     }
-    router.push(`/ritual/${ritualId}`);
-  };
-
-  const getRitualVariant = (value: string) => {
-    let hash = 0;
-    for (let i = 0; i < value.length; i += 1) {
-      hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-    }
-    return hash;
+    router.push(`/mission?creating=1&ritualId=${ritualId}`);
   };
 
   return (
-    <section className="home-shell">
-      <div className="home-hero">
-        <div className="home-mark">
-          <div className="home-logo-icon" aria-hidden="true" />
-          <span className="home-logo-text">Loe.me</span>
+    <section className={`home-shell ${styles.homeShell}`}>
+      <div className={styles.homeContainer}>
+        <div className={styles.hero}>
+          <h1 className={styles.heroTitle}>{t.homeTagline}</h1>
+          <p className={styles.heroSubtitle}>{t.homeHeroTitle}</p>
         </div>
-        <p className="home-tagline">{t.homeTagline}</p>
-        <h1>{t.homeHeroTitle}</h1>
-      </div>
-
-      <form className="ritual-form ritual-form-card" onSubmit={handleSubmit}>
-        <label className="input-label" htmlFor="ritual-intention">
-          {t.homeIntentionLabel}
-        </label>
-        <textarea
-          id="ritual-intention"
-          placeholder={placeholderText}
-          value={intention}
-          onChange={(event) => setIntention(event.target.value)}
-          rows={4}
-        />
-        <div className="ritual-docs">
-          <button className="text-button ritual-docs-button" type="button">
-            {t.homeAddDocs}
-          </button>
-          <span className="ritual-docs-tag">{t.homeGuided}</span>
-        </div>
-        <p className="ritual-helper">{t.homeDocsHelper}</p>
-
-        <div className="ritual-days">
-          <p className="ritual-question">{t.homeDaysQuestion}</p>
-          <div className="ritual-days-slider">
-            <span>
-              {finalDays}
-              {t.daysLong}
-            </span>
-            <input
-              type="range"
-              min={7}
-              max={90}
-              step={1}
-              value={finalDays}
-              onChange={(event) => {
-                setCustomDays(event.target.value);
-                setSelectedDays(null);
-              }}
-              aria-label="Durée du rituel en jours"
-            />
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>{intentionTitle}</h2>
+            <div className={`${styles.card} ${styles.intentionCard}`}>
+              <textarea
+                id="ritual-intention"
+                className={styles.intentionInput}
+                placeholder={placeholderText}
+                value={intention}
+                onChange={(event) => setIntention(event.target.value)}
+                rows={3}
+              />
+              <div className={styles.cardFooter}>
+                <button className={styles.addDocs} type="button" disabled>
+                  {addDocsCopy}
+                </button>
+                <span className={styles.aiBadge}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={styles.aiIcon}
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+                    <path d="M20 3v4" />
+                    <path d="M22 5h-4" />
+                    <path d="M4 17v2" />
+                    <path d="M5 18H3" />
+                  </svg>
+                  <span>{aiBadgeCopy.replace('✨ ', '')}</span>
+                </span>
+              </div>
+            </div>
+            <p className={styles.helperText}>{helperCopy}</p>
           </div>
-          <div className="chip-row chip-row-pills">
-            {dayOptions.map((days) => (
-              <button
-                key={days}
-                type="button"
-                className={`chip chip-pill ${selectedDays === days ? 'chip-active' : ''}`}
-                onClick={() => {
-                  setSelectedDays(days);
-                  setCustomDays('');
+
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>{daysTitle}</h2>
+            <div className={`${styles.card} ${styles.daysCard}`}>
+              <div className={styles.daysHero}>
+                <span className={`${styles.daysValue} ${styles.fontSerif}`}>{finalDays}</span>
+                <span className={styles.daysUnit}>{daysUnitCopy}</span>
+              </div>
+              <div className={styles.daysStage}>
+                {dayStage.icon} {dayStage.label}
+              </div>
+              <input
+                className={styles.slider}
+                type="range"
+                min={7}
+                max={90}
+                step={1}
+                value={finalDays}
+                onChange={(event) => {
+                  const nextValue = Number(event.target.value);
+                  setSelectedDays(nextValue);
                 }}
-              >
-                {days}
-                {t.daysShort}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button className="primary-button ritual-cta ritual-cta-wide" type="submit">
-          {t.homeCreate}
-        </button>
-      </form>
-
-      <div className="home-history">
-        <div>
-          <h2>{t.homeHistoryTitle}</h2>
-          <p>{t.homeHistorySubtitle}</p>
-        </div>
-        {!ritualsReady ? (
-          <div className="home-history-empty">{t.homeHistoryLoading}</div>
-        ) : ritualIndex.length > 0 ? (
-          <div className="home-grid">
-            {ritualIndex.slice(0, 7).map((ritual) => {
-              const ritualId = ritual.ritualId;
-              const variant = getRitualVariant(ritualId);
-              const hasFavorite = variant % 4 === 0;
-              return (
-                <div
-                  key={ritualId}
-                  className="mission-card"
-                  role="button"
-                  tabIndex={0}
-                  onClick={(event) => {
-                    if ((event.target as HTMLElement | null)?.closest('.mission-delete')) {
-                      return;
-                    }
-                    router.push(`/ritual/${ritualId}`);
-                  }}
-                  onKeyDown={(event) => {
-                    if ((event.target as HTMLElement | null)?.closest('.mission-delete')) {
-                      return;
-                    }
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      router.push(`/ritual/${ritualId}`);
-                    }
-                  }}
-                >
-                  <div className="mission-thumb">
-                    {hasFavorite && <span className="mission-star">★</span>}
-                    <PlanImage
-                      intention={ritual.intention}
-                      title={ritual.pathTitle ?? ritual.intention}
-                      styleId={ritual.imageStyleId}
-                      styleVersion={ritual.imageStyleVersion}
-                      stylePrompt={ritual.imageStylePrompt}
-                      className="mission-thumb-image"
-                    />
-                  </div>
-                  <div className="mission-meta">
-                    <div className="mission-meta-row">
-                      <span className="mission-avatar" aria-hidden="true" />
-                      <div className="mission-meta-title">
-                        <span className="mission-title">
-                          {ritual.pathTitle ?? ritual.intention}
-                        </span>
-                        {!ritual.pathTitle && (
-                          <span className="mission-subtitle">{t.homeMissionFallback}</span>
-                        )}
-                      </div>
-                    </div>
-                    {ritual.pathSummary && (
-                      <p className="mission-subtitle">{ritual.pathSummary}</p>
-                    )}
-                    {showDebug && ritual.debugMeta && (
-                      <div className="mission-subtitle">
-                        domain={ritual.debugMeta.domainId} v=
-                        {ritual.debugMeta.domainPlaybookVersion} · validation=
-                        {ritual.debugMeta.validationMode} · stubs=
-                        {ritual.debugMeta.stubsCount} · full=
-                        {ritual.debugMeta.fullCount} · plan=
-                        {ritual.debugMeta.promptPlan?.promptVersion} (
-                        {ritual.debugMeta.promptPlan?.promptHash?.slice(0, 8)}) · planMs=
-                        {ritual.debugMeta.promptPlan?.latencyMs} · next=
-                        {ritual.debugMeta.promptFull?.promptVersion} (
-                        {ritual.debugMeta.promptFull?.promptHash?.slice(0, 8)}) · nextMs=
-                        {ritual.debugMeta.promptFull?.latencyMs}
-                        {ritual.debugMeta.qualityWarnings?.length
-                          ? ` · warnings=${ritual.debugMeta.qualityWarnings.join(',')}`
-                          : ''}
-                        {ritual.debugMeta.axisMapped?.length
-                          ? ` · axisMapped=${ritual.debugMeta.axisMapped.length} (${ritual.debugMeta.axisMapped
-                              .slice(0, 3)
-                              .map((entry) => `${entry.from}→${entry.to}`)
-                              .join(', ')})`
-                          : ''}
-                        {ritual.debugMeta.zodIssues
-                          ? ` · zodIssues=${JSON.stringify(ritual.debugMeta.zodIssues).slice(
-                              0,
-                              120,
-                            )}…`
-                          : ''}
-                        {ritual.debugMeta.axisMapped?.length ? (
-                          <span className="chip chip-pill" style={{ marginLeft: 6 }}>
-                            axis mapped: {ritual.debugMeta.axisMapped.length}
-                          </span>
-                        ) : null}
-                      </div>
-                    )}
-                    <div className="mission-viewed">
-                      Viewed{' '}
-                      {ritual.createdAt
-                        ? new Date(ritual.createdAt).toLocaleDateString()
-                        : t.homeUnknownDate}
-                    </div>
+                style={{ '--progress': `${sliderProgress * 100}%` } as React.CSSProperties}
+                aria-label="Durée du rituel en jours"
+              />
+              <div className={styles.pills}>
+                {dayOptions.map((days) => {
+                  const stage = dayStages[days];
+                  const isActive = activeDayOption === days;
+                  return (
                     <button
-                      className="mission-delete"
+                      key={days}
                       type="button"
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setRitualIndex((prev) =>
-                          prev.filter((item) => item.ritualId !== ritualId),
-                        );
-                        if (typeof window !== 'undefined') {
-                          try {
-                            window.localStorage.removeItem(buildRitualStorageKey(ritualId));
-                          } catch {
-                            // ignore
-                          }
-                        }
-                      }}
+                      className={`${styles.pill} ${isActive ? styles.pillActive : ''}`}
+                      onClick={() => setSelectedDays(days)}
                     >
-                      Remove
+                      <span className={styles.pillDays}>{days}d</span>
+                      <span className={styles.pillLabel}>{stage?.label ?? 'Foundations'}</span>
                     </button>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="home-history-empty">{t.homeHistoryEmpty}</div>
-        )}
-      </div>
 
-      <div className="home-admin-link">
-        <a href="/admin/images?key=1">Retour à l’admin images</a>
+          {submitError && <p className="creating-error">{submitError}</p>}
+
+          <div className={styles.ctaRow}>
+            <Button
+              variant="cta"
+              type="submit"
+              disabled={!intention.trim() || isSubmitting}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={styles.ctaIcon}
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+                <path d="M20 3v4" />
+                <path d="M22 5h-4" />
+                <path d="M4 17v2" />
+                <path d="M5 18H3" />
+              </svg>
+              <span>{isSubmitting ? (isFrench ? 'Génération…' : 'Generating…') : ctaCopy}</span>
+            </Button>
+          </div>
+        </form>
+
+        <RitualHistory />
+
+        <div className="home-admin-link">
+          <a href="/admin/images?key=1">Retour à l’admin images</a>
+          {' · '}
+          <a href="/admin/domains?key=1">Admin domains</a>
+          {' · '}
+          <a href="/admin/safety?key=1">Admin safety</a>
+        </div>
       </div>
     </section>
   );

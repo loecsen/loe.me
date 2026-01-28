@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { buildInitialProgress, recomputeStates } from '@loe/core';
-import type { LearningPath, LearningPathBlueprintV2, MissionFull, MissionStub } from '@loe/core';
+import type { LearningPath, LearningPathBlueprintV2, MissionFull, MissionStub, TraceEvent } from '@loe/core';
 import MissionDashboard from './MissionDashboard';
 import PlanImage from '../components/PlanImage';
+import DebugDecisionPanel from '../components/DebugDecisionPanel';
 import { useI18n } from '../components/I18nProvider';
 import { buildClarificationSuggestions } from '../lib/domains/clarify';
 import { SAFETY_REASON_COPY, SAFETY_CHOICE_LABELS } from '../lib/safety/safetyCopy';
@@ -118,6 +119,7 @@ export default function MissionPage() {
   const [creatingStatus, setCreatingStatus] = useState<'idle' | 'clarify' | 'generating' | 'error'>(
     'idle',
   );
+  const [debugTrace, setDebugTrace] = useState<TraceEvent[] | null>(null);
   const inflightRef = useRef(false);
 
   const getCopy = (key: string) => (t as unknown as Record<string, string>)[key] ?? key;
@@ -216,6 +218,7 @@ export default function MissionPage() {
     const run = async () => {
       try {
         setCreatingErrorReason(null);
+        setDebugTrace(null);
         const response = await fetch('/api/missions/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -227,22 +230,43 @@ export default function MissionPage() {
             clarification: pendingRequest.clarification,
           }),
         });
-        const payload = (await response.json()) as { data?: MissionsResponse; ritualId?: string };
+        const payload = (await response.json()) as {
+          data?: MissionsResponse;
+          ritualId?: string;
+          debugTrace?: TraceEvent[];
+          blocked?: boolean;
+          reason_code?: string;
+        };
+        if (payload?.debugTrace) {
+          setDebugTrace(payload.debugTrace);
+        }
         if (!response.ok) {
           if (payload && typeof payload === 'object' && 'error' in payload) {
             const errorPayload = payload as { error?: string; reason_code?: string };
             if (errorPayload.error === 'blocked') {
               setCreatingErrorReason(errorPayload.reason_code ?? 'other_blocked');
             }
+          } else if (payload?.blocked) {
+            setCreatingErrorReason(payload.reason_code ?? 'other');
           }
           setCreatingStatus('error');
           return;
         }
-        const clarifyPayload = payload.data?.needsClarification
-          ? payload.data
-          : (payload as { needsClarification?: boolean })?.needsClarification
-            ? payload
-            : null;
+        if (payload?.debugTrace) {
+          setDebugTrace(payload.debugTrace);
+        }
+        const clarifyPayload =
+          payload?.data && typeof payload.data === 'object' && 'needsClarification' in payload.data
+            ? (payload.data as { needsClarification?: boolean; choices?: unknown })
+            : payload && typeof payload === 'object' && 'needsClarification' in payload
+              ? (payload as { needsClarification?: boolean; choices?: unknown })
+              : null;
+        if (clarifyPayload && typeof clarifyPayload === 'object' && 'debugTrace' in clarifyPayload) {
+          const debugPayload = clarifyPayload as { debugTrace?: TraceEvent[] };
+          if (debugPayload.debugTrace) {
+            setDebugTrace(debugPayload.debugTrace);
+          }
+        }
         if (clarifyPayload?.needsClarification) {
           const choices = (clarifyPayload as {
             choices?: Array<{
@@ -342,13 +366,20 @@ export default function MissionPage() {
           pathSummary: data.path.pathSummary,
           pathDescription: data.path.pathDescription,
           feasibilityNote: data.path.feasibilityNote,
-          previewStubs: data.missionStubs.slice(0, 4).map((stub) => ({
-            title: stub.title,
-            summary: stub.summary,
-            effortType: stub.effortType,
-            estimatedMinutes: stub.estimatedMinutes,
-            dayIndex: stub.dayIndex,
-          })),
+          previewStubs: data.missionStubs.slice(0, 4).map((stub) => {
+            const stubWithMeta = stub as MissionStub & {
+              dayIndex?: number;
+              effortType?: string;
+              estimatedMinutes?: number;
+            };
+            return {
+              title: stub.title,
+              summary: stub.summary,
+              effortType: stubWithMeta.effortType ?? 'practice',
+              estimatedMinutes: stubWithMeta.estimatedMinutes ?? 10,
+              dayIndex: stubWithMeta.dayIndex,
+            };
+          }),
           imageStyleId: style.id,
           imageStyleVersion: style.version,
           imageStylePrompt: style.prompt,
@@ -469,7 +500,7 @@ export default function MissionPage() {
           <p>Tu peux rester ici, on s’occupe du reste.</p>
         </div>
         {creatingStatus === 'generating' && !creatingErrorReason && creationIntro}
-        {creatingStatus === 'clarify' && clarifySuggestions ? (
+        {creatingStatus === 'clarify' && clarifySuggestions && !creatingErrorReason ? (
           <div className="clarify-panel">
             <h2>{getClarifyCopy(clarifyReason).title}</h2>
             <p>{getClarifyCopy(clarifyReason).body}</p>
@@ -533,6 +564,18 @@ export default function MissionPage() {
             <div className="ritual-loading-spinner" />
           </div>
         )}
+        {debugTrace ? (
+          <DebugDecisionPanel
+            trace={debugTrace}
+            status={
+              creatingErrorReason
+                ? 'BLOCKED'
+                : creatingStatus === 'clarify'
+                  ? 'NEEDS_CLARIFICATION'
+                  : 'OK'
+            }
+          />
+        ) : null}
       </section>
     );
   }
@@ -568,7 +611,7 @@ export default function MissionPage() {
             </div>
           ) : active?.ritual?.intention ? (
             <PlanImage
-              ritualId={active.ritual.ritualId}
+              ritualId={active.ritualId}
               intention={active.ritual.intention}
               title={active.ritual.path?.pathTitle}
               styleId={active.ritual.imageStyleId}

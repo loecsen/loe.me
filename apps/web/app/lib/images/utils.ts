@@ -81,7 +81,7 @@ export async function requestMissionImage(
       const payload = await response.json();
       const imageUrl = payload?.imageUrl ?? null;
       const imageDataUrl = payload?.imageDataUrl ?? null;
-      const resolved = imageUrl ?? imageDataUrl;
+      const resolved = imageDataUrl ?? imageUrl;
       if (resolved) {
         setCachedImage(cacheKey, resolved);
       }

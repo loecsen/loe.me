@@ -360,7 +360,7 @@ export default function MissionDashboard() {
         };
         setMissionData(nextMissionData);
         setPath(pathState);
-        setMissions(data.missions);
+        setMissions(data.missions ?? []);
         setIsHydrated(true);
         if (ritual) {
           setRitual({ ...ritual, proposal: null });
@@ -382,20 +382,20 @@ export default function MissionDashboard() {
   };
 
   const getCurrentLevelLabel = () => {
-    if (!path.progress.current) {
+    const current = path.progress.current ?? nextAvailableStep;
+    if (!current) {
       return '—';
     }
-    const levelIndex = path.blueprint.levels.findIndex(
-      (item) => item.id === path.progress.current?.levelId,
-    );
+    const levelIndex = path.blueprint.levels.findIndex((item) => item.id === current.levelId);
     return levelIndex === -1 ? '—' : `${t.missionLevelPrefix} ${levelIndex + 1}`;
   };
 
   const getCurrentStepLabel = () => {
-    if (!path.progress.current) {
+    const current = path.progress.current ?? nextAvailableStep;
+    if (!current) {
       return '—';
     }
-    return getStepTitle(path.progress.current.levelId, path.progress.current.stepId);
+    return getStepTitle(current.levelId, current.stepId);
   };
 
   const getMissionIdForStep = (levelId: string, stepId: string) => {
@@ -406,7 +406,7 @@ export default function MissionDashboard() {
 
   const getStepIdForMission = (missionId: string | null) => {
     if (!missionId) return null;
-    return missionToStepId.get(missionId) ?? missionsById.get(missionId)?.stepId ?? null;
+    return missionToStepId.get(missionId) ?? null;
   };
 
   const getPreviousMissionSummary = (missionId: string) => {
@@ -438,6 +438,8 @@ export default function MissionDashboard() {
   const updateMissionContent = (
     mission: MissionFull & { generatedAt?: string; contentStatus?: MissionStatus },
   ) => {
+    const resolvedStatus =
+      mission.contentStatus === 'idle' ? 'missing' : mission.contentStatus ?? 'ready';
     setMissions((prev) => {
       const exists = prev.some((item) => item.id === mission.id);
       if (!exists) {
@@ -447,7 +449,7 @@ export default function MissionDashboard() {
             ...(mission as MissionEntry),
             blocks: mission.blocks,
             generatedAt: mission.generatedAt ?? new Date().toISOString(),
-            contentStatus: mission.contentStatus ?? 'ready',
+            contentStatus: resolvedStatus,
           },
         ];
       }
@@ -458,7 +460,7 @@ export default function MissionDashboard() {
               ...mission,
               blocks: mission.blocks,
               generatedAt: mission.generatedAt ?? item.generatedAt,
-              contentStatus: mission.contentStatus ?? 'ready',
+              contentStatus: resolvedStatus,
             }
           : item,
       );
@@ -478,7 +480,7 @@ export default function MissionDashboard() {
                     ...mission,
                     blocks: mission.blocks,
                     generatedAt: mission.generatedAt ?? item.generatedAt,
-                    contentStatus: mission.contentStatus ?? 'ready',
+                    contentStatus: resolvedStatus,
                   }
                 : item,
             )
@@ -488,7 +490,7 @@ export default function MissionDashboard() {
                 ...(mission as MissionEntry),
                 blocks: mission.blocks,
                 generatedAt: mission.generatedAt ?? new Date().toISOString(),
-                contentStatus: mission.contentStatus ?? 'ready',
+                contentStatus: resolvedStatus,
               },
             ],
       };
@@ -594,10 +596,11 @@ export default function MissionDashboard() {
         const hasBlocks = Boolean(returnedMission.blocks?.length);
         setActiveMissionId(returnedMission.id);
         if (options?.mode === 'manual' && options?.requestedStepId) {
-          if (returnedMission.stepId !== options.requestedStepId) {
+          const returnedStepId = getStepIdForMission(returnedMission.id);
+          if (returnedStepId && returnedStepId !== options.requestedStepId) {
             setManualMismatch({
               requestedStepId: options.requestedStepId,
-              returnedStepId: returnedMission.stepId,
+              returnedStepId,
             });
           } else {
             setManualMismatch(null);
@@ -621,7 +624,7 @@ export default function MissionDashboard() {
         if (process.env.NODE_ENV !== 'production') {
           console.log('[MissionDashboard] /next mission', {
             returnedMissionId: returnedMission.id,
-            returnedStepId: returnedMission.stepId,
+            returnedStepId: getStepIdForMission(returnedMission.id),
           });
         }
         return returnedMission as MissionFull;
@@ -768,27 +771,26 @@ export default function MissionDashboard() {
         const updated = markStepCompleted(prev, activeStep.levelId, activeStep.stepId, nowISO(), {
           score: payload.score ? payload.score * 100 : undefined,
         });
-        nextStep = getNextAvailableStep(updated);
+        nextStep = getNextAvailableStep(updated) as { levelId: string; stepId: string } | null;
         return updated;
       });
     }
 
     if (nextStep) {
-      const nextMission = await ensureMissionReady(getMissionIdForStep(nextStep.levelId, nextStep.stepId), {
+      const resolvedNextStep = nextStep as { levelId: string; stepId: string };
+      const nextMission = await ensureMissionReady(
+        getMissionIdForStep(resolvedNextStep.levelId, resolvedNextStep.stepId),
+        {
         mode: 'auto',
-      });
+        },
+      );
       if (!nextMission) {
         setOutcomeError("Couldn't generate next attempt");
         return false;
       }
     }
 
-    if (outcome === 'success') {
-      window.setTimeout(() => {
-        setPlayerOpen(false);
-        setActiveStep(null);
-      }, 1200);
-    } else {
+    if (outcome !== 'success') {
       setPlayerOpen(false);
       setActiveStep(null);
     }
@@ -850,6 +852,13 @@ export default function MissionDashboard() {
     t.missionStepPrefix,
     t.missionTitle,
   ]);
+
+  const nextMissionTitle = (() => {
+    const currentMissionId =
+      activeMissionId ?? (activeStep ? getMissionIdForStep(activeStep.levelId, activeStep.stepId) : null);
+    const nextMissionId = getNextMissionIdAfter(currentMissionId);
+    return nextMissionId ? missionsById.get(nextMissionId)?.title ?? null : null;
+  })();
 
   const shouldShowPlaceholder = Boolean(ritual && !missionData && !missionError);
 
@@ -980,6 +989,7 @@ export default function MissionDashboard() {
       <MissionPlayer
         open={playerOpen}
         missionView={missionView}
+        nextMissionTitle={nextMissionTitle}
         outcomeError={outcomeError}
         onClose={() => {
           setPlayerOpen(false);
@@ -990,7 +1000,7 @@ export default function MissionDashboard() {
         onRetry={() => {
           void ensureMissionReady(missionView?.missionId ?? null, {
             mode: 'manual',
-            requestedStepId: missionView?.requestedStepId ?? null,
+            requestedStepId: missionView?.requestedStepId ?? undefined,
           });
         }}
       />

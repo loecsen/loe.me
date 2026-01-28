@@ -9,9 +9,11 @@ import type {
   LearningPathState,
   MissionFull,
   MissionStub,
+  TraceEvent,
 } from '@loe/core';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { useI18n } from '../../components/I18nProvider';
+import DebugDecisionPanel from '../../components/DebugDecisionPanel';
 import { buildPlanImageKey, requestMissionImage } from '../../lib/images/utils';
 import { getSelectedStyleId } from '../../lib/images/styleSelection';
 import { getImageStyle } from '../../lib/images/styles';
@@ -162,6 +164,7 @@ export default function RitualPage() {
   >(null);
   const [customClarification, setCustomClarification] = useState('');
   const [clarifyReason, setClarifyReason] = useState<string | null>(null);
+  const [debugTrace, setDebugTrace] = useState<TraceEvent[] | null>(null);
   const inflightRef = useRef(false);
 
   const steps = useMemo(
@@ -339,6 +342,7 @@ export default function RitualPage() {
           : '/api/missions/generate';
       let payload: unknown;
       try {
+        setDebugTrace(null);
         if (process.env.NODE_ENV !== 'production') {
           console.log('[client] generate request', {
             intention: record.intention,
@@ -389,9 +393,21 @@ export default function RitualPage() {
             );
           }
         }
+        const payloadRecord = payload as Record<string, unknown> | null;
+        const payloadDebugTrace =
+          (payloadRecord?.debugTrace as TraceEvent[] | undefined) ??
+          ((payloadRecord?.data as { debugTrace?: TraceEvent[] } | undefined)?.debugTrace as
+            | TraceEvent[]
+            | undefined);
+        if (payloadDebugTrace) {
+          setDebugTrace(payloadDebugTrace);
+        }
+
         if (!response.ok) {
-          const errorMessage =
-            (payload as { error?: string } | undefined)?.error ?? 'generation_failed';
+          const blockedPayload = payload as { blocked?: boolean; reason_code?: string; error?: string };
+          const errorMessage = blockedPayload.blocked
+            ? 'blocked'
+            : blockedPayload.error ?? 'generation_failed';
           if (process.env.NODE_ENV !== 'production') {
             console.log('[client] generate rawText', rawText.slice(0, 200));
           }
@@ -399,6 +415,7 @@ export default function RitualPage() {
             JSON.stringify({
               message: errorMessage,
               debugMeta: {
+                reason_code: blockedPayload.reason_code,
                 status: response.status,
                 statusText: response.statusText,
                 payload,
@@ -435,13 +452,15 @@ export default function RitualPage() {
           (payload as { data?: { ritualId?: string } })?.data?.ritualId ??
           (payload as { ritualId?: string })?.ritualId;
         const data = (payload as { data?: MissionsResponse & { ritualPath?: string } })?.data;
-        const payloadRecord = payload as Record<string, unknown> | null;
         const hasNeedsClarification =
           !!payloadRecord &&
           'needsClarification' in payloadRecord &&
           Boolean(payloadRecord.needsClarification);
         const clarifyPayload = data?.needsClarification ? data : hasNeedsClarification ? payloadRecord : null;
         if (clarifyPayload?.needsClarification) {
+          if (payloadDebugTrace) {
+            setDebugTrace(payloadDebugTrace);
+          }
           const choices = (clarifyPayload as {
             choices?: Array<{
               id?: string;
@@ -930,6 +949,12 @@ export default function RitualPage() {
               </button>
             </div>
           </div>
+          {debugTrace ? (
+            <DebugDecisionPanel
+              trace={debugTrace}
+              status={clarifySuggestions ? 'NEEDS_CLARIFICATION' : 'OK'}
+            />
+          ) : null}
         </section>
       );
     }
@@ -944,6 +969,9 @@ export default function RitualPage() {
           <div className="creating-preview-card">
             <div className="ritual-loading-spinner" />
           </div>
+          {debugTrace ? (
+            <DebugDecisionPanel trace={debugTrace} status="OK" />
+          ) : null}
         </section>
       );
     }
@@ -961,6 +989,9 @@ export default function RitualPage() {
         <div className="creating-preview-card">
           <div className="ritual-loading-spinner" />
         </div>
+        {debugTrace ? (
+          <DebugDecisionPanel trace={debugTrace} status="OK" />
+        ) : null}
       </section>
     );
   }
@@ -1193,6 +1224,18 @@ export default function RitualPage() {
           </div>
         </div>
       )}
+      {debugTrace ? (
+        <DebugDecisionPanel
+          trace={debugTrace}
+          status={
+            record.status === 'error' && (record.error === 'blocked' || record.debugMeta?.reason_code)
+              ? 'BLOCKED'
+              : clarifySuggestions
+                ? 'NEEDS_CLARIFICATION'
+                : 'OK'
+          }
+        />
+      ) : null}
     </section>
   );
 }

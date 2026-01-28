@@ -11,12 +11,12 @@ const run = async () => {
     const status = response.status;
     const body = await response.json();
 
-    if (status !== 403) {
-      console.error(`[${endpoint}] Expected status 403, got`, status);
+    if (status !== 400) {
+      console.error(`[${endpoint}] Expected status 400, got`, status);
       process.exit(1);
     }
-    if (body?.error !== 'blocked') {
-      console.error(`[${endpoint}] Expected error "blocked", got`, body?.error);
+    if (!body?.blocked) {
+      console.error(`[${endpoint}] Expected blocked=true`);
       process.exit(1);
     }
     if (body?.reason_code !== 'violence') {

@@ -32,6 +32,7 @@ export type DomainPlaybook = {
   label: string;
   version: number;
   profile: DomainProfile;
+  intentHints?: string[];
   allowedEffortTypes: EffortType[];
   weights: Partial<Record<EffortType, number>>;
   rules: string[];
@@ -56,6 +57,11 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Build practical language skills with balanced input/output.',
       audience: 'Learners building real-world language fluency.',
     },
+    intentHints: [
+      'Spanish A2 in 30 days',
+      'Chinese beginner tones',
+      'French pronunciation practice',
+    ],
     allowedEffortTypes: ['listen', 'speak', 'read', 'write', 'quiz', 'practice', 'review'],
     weights: {
       listen: 2,
@@ -88,6 +94,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Improve form, consistency, and measurable fitness outcomes.',
       audience: 'People building healthy training habits.',
     },
+    intentHints: ['Learn tennis serve', 'Crawl swimming technique', 'Start running 3x/week'],
     allowedEffortTypes: ['practice', 'drill', 'checklist', 'reflection', 'review'],
     weights: {
       practice: 3,
@@ -118,6 +125,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Build practical professional skills with measurable outcomes.',
       audience: 'Professionals improving day-to-day performance.',
     },
+    intentHints: ['Write better emails', 'Lead better meetings', 'Pitch a project'],
     allowedEffortTypes: ['read', 'write', 'simulation', 'reflection', 'review', 'practice'],
     weights: {
       read: 1,
@@ -149,6 +157,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Drive growth via experiments, feedback, and iteration.',
       audience: 'Builders and operators.',
     },
+    intentHints: ['Acquire first 100 users', 'Improve conversion rate', 'Launch a newsletter'],
     allowedEffortTypes: ['practice', 'simulation', 'reflection', 'review', 'write'],
     weights: {
       practice: 2,
@@ -179,6 +188,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Build calm, consistent wellbeing routines.',
       audience: 'People improving mental wellbeing.',
     },
+    intentHints: ['Meditate 10 minutes a day', 'Reduce stress before sleep', 'Morning breathing'],
     allowedEffortTypes: ['practice', 'reflection', 'review', 'checklist'],
     weights: {
       practice: 3,
@@ -208,6 +218,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Build hands-on coding skills with clear deliverables.',
       audience: 'Developers and learners.',
     },
+    intentHints: ['Learn React basics', 'Build a todo app in JS', 'Understand TypeScript types'],
     allowedEffortTypes: ['practice', 'drill', 'read', 'write', 'simulation', 'review'],
     weights: {
       practice: 3,
@@ -239,6 +250,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Develop technique, ear, and consistency.',
       audience: 'Musicians at any level.',
     },
+    intentHints: ['Guitar chord transitions', 'Piano scales', 'Ear training basics'],
     allowedEffortTypes: ['practice', 'drill', 'listen', 'review', 'reflection'],
     weights: {
       practice: 3,
@@ -269,6 +281,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Build tangible craft and DIY abilities safely.',
       audience: 'People learning practical skills.',
     },
+    intentHints: ['Cook 5 easy meals', 'Learn basic sewing', 'DIY a small shelf'],
     allowedEffortTypes: ['practice', 'checklist', 'review', 'reflection', 'watch'],
     weights: {
       practice: 2,
@@ -299,6 +312,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       intent: 'Improve recall, understanding, and exam readiness.',
       audience: 'Students preparing for exams.',
     },
+    intentHints: ['Prepare math exam', 'History revision plan', 'Biology flashcards'],
     allowedEffortTypes: ['read', 'quiz', 'practice', 'review', 'reflection'],
     weights: {
       read: 1,
@@ -325,10 +339,11 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
     label: 'Personal productivity',
     version: 1,
     profile: {
-      label: 'Execution & focus',
-      intent: 'Build consistent execution and clarity.',
-      audience: 'People improving their routines.',
+      label: 'Organization & focus',
+      intent: 'Build clear priorities, simple routines, and consistent focus.',
+      audience: 'People seeking better personal organization.',
     },
+    intentHints: ['Organize my week', 'Build a morning routine', 'Focus better at work'],
     allowedEffortTypes: ['practice', 'checklist', 'reflection', 'review', 'write'],
     weights: {
       practice: 2,
@@ -342,6 +357,7 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       'Make tasks observable and measurable.',
       'Favor planning + review loops.',
       'Encourage single-task focus.',
+      'Avoid workplace jargon; keep it personal.',
     ],
     remediationRules: [
       'If skipped, propose a 5-minute version.',
@@ -349,5 +365,77 @@ export const DOMAIN_PLAYBOOKS: DomainPlaybook[] = [
       'Use a checklist to rebuild momentum.',
     ],
     resourcePolicy: { ...basePolicy, preferOrder: ['userProvided', 'web'] },
+  },
+  {
+    id: 'skill_performance',
+    label: 'Skill performance',
+    version: 1,
+    profile: {
+      label: 'Practical skill building',
+      intent: 'Build a concrete skill through drills, repetition, and self-checks.',
+      audience: 'People learning a hands-on skill from scratch.',
+    },
+    intentHints: ['Learn guitar basics', 'Play chess openings', 'Learn to draw faces'],
+    allowedEffortTypes: ['read', 'listen', 'practice', 'drill', 'review', 'reflection'],
+    weights: {
+      practice: 3,
+      drill: 2,
+      read: 1,
+      listen: 1,
+      review: 1,
+      reflection: 1,
+    },
+    rules: [
+      'Keep missions 5–10 minutes and very concrete.',
+      'One micro-skill per mission with a clear self-check.',
+      'Favor hands-on drills over theory.',
+      'Use simple repetition and visible progress.',
+    ],
+    remediationRules: [
+      'If stuck, reduce the step to a single drill.',
+      'Add a short example before the action.',
+      'Shorten the practice goal and retry.',
+    ],
+    resourcePolicy: {
+      allowSearch: false,
+      maxResources: 3,
+      preferOrder: ['loecsen', 'userProvided'],
+      languageFallback: true,
+    },
+  },
+  {
+    id: 'wellbeing_mind',
+    label: 'Wellbeing (mind)',
+    version: 1,
+    profile: {
+      label: 'Mental wellbeing',
+      intent: 'Build calm routines for stress, sleep, and mental clarity.',
+      audience: 'People seeking gentle, consistent mental wellbeing.',
+    },
+    intentHints: ['Reduce stress', 'Meditate 10 min/day', 'Sleep better'],
+    allowedEffortTypes: ['practice', 'reflection', 'checklist', 'review'],
+    weights: {
+      practice: 3,
+      reflection: 2,
+      checklist: 1,
+      review: 1,
+    },
+    rules: [
+      'Keep sessions short, gentle, and calming.',
+      'Focus on breathing, grounding, or short journaling.',
+      'Use non-judgmental, supportive language.',
+      'Make goals easy to complete daily.',
+    ],
+    remediationRules: [
+      'If skipped, offer a 2-minute alternative.',
+      'Reduce friction to a single simple action.',
+      'Emphasize comfort over performance.',
+    ],
+    resourcePolicy: {
+      allowSearch: false,
+      maxResources: 3,
+      preferOrder: ['loecsen', 'userProvided'],
+      languageFallback: true,
+    },
   },
 ];

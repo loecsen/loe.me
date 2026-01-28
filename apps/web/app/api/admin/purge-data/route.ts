@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+export const runtime = 'nodejs';
+
 const dataRoot = path.join(process.cwd(), 'data');
 const ritualsDir = path.join(dataRoot, 'rituals');
 const imagesDir = path.join(dataRoot, 'images');

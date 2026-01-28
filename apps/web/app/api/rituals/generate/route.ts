@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getLocaleFromAcceptLanguage, normalizeLocale } from '../../../lib/i18n';
 import { runSafetyGate } from '../../../lib/safety/safetyGate';
+import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
+import type { TraceEvent } from '@loe/core';
+import { runSafetyV2, pushTrace } from '@loe/core';
+
+export const runtime = 'nodejs';
 
 type ProposalState = 'realistic' | 'ambitious';
 
@@ -111,15 +116,41 @@ export async function POST(request: Request) {
     });
   }
 
-  const gate = runSafetyGate(rawIntention, resolvedLocale);
-  if (gate.status === 'blocked') {
-    console.log('[rituals.generate] blocked', gate.reasonCode);
+  const debugEnabled = process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production';
+  const trace: TraceEvent[] | undefined = debugEnabled ? [] : undefined;
+
+  const { guard: lexiconGuard } = await getLexiconGuard();
+  const safetyVerdict = await runSafetyV2({
+    text: rawIntention,
+    locale: resolvedLocale,
+    lexiconGuard,
+    trace,
+  });
+  if (safetyVerdict.status === 'blocked') {
+    if (debugEnabled) {
+      console.warn('[safety] blocked', {
+        reason_code: safetyVerdict.reason_code,
+        intentionExcerpt: rawIntention.slice(0, 120),
+      });
+    }
     return NextResponse.json(
-      { error: 'blocked', reason_code: gate.reasonCode },
-      { status: 403 },
+      {
+        blocked: true,
+        reason_code: safetyVerdict.reason_code,
+        ...(debugEnabled ? { debugTrace: trace } : {}),
+      },
+      { status: 400 },
     );
   }
+
+  const gate = runSafetyGate(rawIntention, resolvedLocale);
   if (gate.status === 'needs_clarification') {
+    pushTrace(trace, {
+      gate: 'clarification_v1',
+      outcome: 'needs_clarification',
+      reason_code: gate.reasonCode,
+      meta: { source: 'safety_gate' },
+    });
     return NextResponse.json({
       needsClarification: true,
       reason_code: gate.reasonCode,
@@ -131,9 +162,18 @@ export async function POST(request: Request) {
         intention: choice.intention,
         domainHint: 'personal_productivity',
       })),
+      ...(debugEnabled ? { debugTrace: trace } : {}),
     });
   }
 
+  pushTrace(trace, {
+    gate: 'clarification_v1',
+    outcome: 'ok',
+  });
+
   const proposal = createMockProposal(rawIntention, days, resolvedLocale);
-  return NextResponse.json({ data: proposal });
+  return NextResponse.json({
+    data: proposal,
+    ...(debugEnabled ? { debugTrace: trace } : {}),
+  });
 }

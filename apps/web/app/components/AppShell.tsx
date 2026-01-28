@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Container } from '@loe/ui';
 import FloatingStartWidget from './FloatingStartWidget';
 import { useI18n } from './I18nProvider';
@@ -18,9 +19,11 @@ type AppShellProps = {
 export default function AppShell({ children }: AppShellProps) {
   const { t, locale, setLocale } = useI18n();
   const { session, signIn, signOut, reset } = useLocalSession();
+  const pathname = usePathname();
   const [authOpen, setAuthOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const isHome = pathname === '/';
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -46,17 +49,6 @@ export default function AppShell({ children }: AppShellProps) {
             <span className="brand-dot" />
             <span>Loe.me</span>
           </Link>
-          <nav className="nav">
-            <Link className="nav-link" href="/">
-              {t.navHome}
-            </Link>
-            <Link className="nav-link" href="/mission">
-              {t.navMission}
-            </Link>
-            <Link className="nav-link" href="/demo">
-              {t.navDemo}
-            </Link>
-          </nav>
           <div className="header-actions">
             <select
               className="locale-toggle"
@@ -118,10 +110,9 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
         </Container>
       </header>
-      <main className="app-main">
+      <main className={`app-main${isHome ? ' app-main-home' : ''}`}>
         <Container>{children}</Container>
       </main>
-      <FloatingStartWidget />
       <AuthModal
         open={authOpen}
         onClose={() => setAuthOpen(false)}

@@ -5,6 +5,8 @@ import {
   validatePlaybooks,
 } from '../../../lib/domains/resolver';
 
+export const runtime = 'nodejs';
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const isDev = process.env.NODE_ENV === 'development';

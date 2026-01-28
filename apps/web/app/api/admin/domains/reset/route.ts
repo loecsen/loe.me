@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { loadOverrides, resetOverrides, resolvePlaybooks, validatePlaybooks } from '../../../../lib/domains/resolver';
 
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const isDev = process.env.NODE_ENV === 'development';

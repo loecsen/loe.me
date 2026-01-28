@@ -3,6 +3,8 @@ import { getDataPath, readJson } from '../../../lib/storage/fsStore';
 import type { ProgressEventInput } from '../../../lib/missions/progressTypes';
 import { recordProgressEvent } from '../../../lib/missions/progressStore';
 
+export const runtime = 'nodejs';
+
 type Payload = Omit<ProgressEventInput, 'meta'>;
 
 type RitualSnapshot = {
@@ -13,8 +15,9 @@ type RitualSnapshot = {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as Partial<Payload>;
+  const rawOutcome = body?.outcome as string | undefined;
   const normalizedOutcome =
-    body?.outcome === 'failed' || body?.outcome === 'partly' ? 'fail' : body?.outcome;
+    rawOutcome === 'failed' || rawOutcome === 'partly' ? 'fail' : rawOutcome;
   if (!body?.ritualId || !body?.missionId || !body?.stepId || !normalizedOutcome) {
     return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
   }

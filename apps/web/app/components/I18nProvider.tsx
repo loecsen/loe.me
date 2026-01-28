@@ -41,7 +41,10 @@ export function I18nProvider({ initialLocale, acceptLanguage, children }: I18nPr
     setStoredLocale(next);
   };
 
-  const t = useMemo(() => translations[locale] ?? translations[defaultLocale], [locale]);
+  const t = useMemo(
+    () => (translations[locale] ?? translations[defaultLocale]) as Copy,
+    [locale],
+  );
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>

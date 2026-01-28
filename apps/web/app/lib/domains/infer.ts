@@ -61,9 +61,51 @@ const DOMAIN_KEYWORDS: Record<string, string[]> = {
     'anxiety',
     'anxiété',
   ],
+  wellbeing_mind: [
+    'stress',
+    'anxiety',
+    'anxiété',
+    'calm',
+    'calme',
+    'sommeil',
+    'sleep',
+    'énergie',
+    'energy',
+    'mindfulness',
+    'méditation',
+    'breathing',
+    'respiration',
+    'breath',
+  ],
+  skill_performance: [
+    'guitare',
+    'guitar',
+    'piano',
+    'échecs',
+    'chess',
+    'dessin',
+    'drawing',
+    'code',
+    'coding',
+    'practice',
+    'drill',
+  ],
   tech_coding: ['code', 'coding', 'programming', 'javascript', 'python', 'react', 'typescript'],
-  music_practice: ['guitar', 'piano', 'violin', 'drums', 'music', 'singing'],
-  craft_cooking_diy: ['cooking', 'cuisine', 'recipe', 'recette', 'diy', 'bricolage', 'craft'],
+  music_practice: ['violin', 'drums', 'music', 'singing'],
+  craft_cooking_diy: [
+    'cooking',
+    'cuisine',
+    'recipe',
+    'recette',
+    'pizza',
+    'pizzas',
+    'pâte',
+    'pate',
+    'four',
+    'diy',
+    'bricolage',
+    'craft',
+  ],
   academics_exam: ['exam', 'examen', 'math', 'history', 'biology', 'physics', 'revision', 'révision'],
   professional_skills: ['presentation', 'presentation skills', 'email', 'pitch', 'meeting', 'leadership'],
   business_growth: ['growth', 'marketing', 'sales', 'startup', 'business', 'acquisition'],
@@ -213,11 +255,11 @@ const mapGoalHintToDomain = (goalHint: EnrichedIntention['goalHint']) => {
     case 'fitness_skill':
       return 'fitness_sport';
     case 'wellbeing_meditation':
-      return 'wellbeing_meditation';
+      return 'wellbeing_mind';
     case 'coding_skill':
-      return 'tech_coding';
+      return 'skill_performance';
     case 'music_skill':
-      return 'music_practice';
+      return 'skill_performance';
     case 'business_growth':
       return 'business_growth';
     case 'professional_skill':

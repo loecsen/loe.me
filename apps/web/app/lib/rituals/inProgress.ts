@@ -1,4 +1,4 @@
-export type RitualStatus = 'generating' | 'ready' | 'error';
+export type RitualStatus = 'generating' | 'ready' | 'error' | 'completed';
 
 export type RitualIndexItem = {
   ritualId: string;
@@ -7,6 +7,17 @@ export type RitualIndexItem = {
   status: RitualStatus;
   createdAt: string;
   updatedAt: string;
+  lastViewedAt?: string;
+  lastOpenedAt?: string;
+  createdBy?: string | null;
+  hidden?: boolean;
+  clarification?: {
+    originalIntention: string;
+    chosenLabel: string;
+    chosenDomainId: string;
+    chosenIntention?: string;
+    createdAt: string;
+  };
   pathTitle?: string;
   pathSummary?: string;
   pathDescription?: string;
@@ -25,6 +36,7 @@ export type RitualIndexItem = {
     domainId?: string;
     domainPlaybookVersion?: string;
     validationMode?: string;
+    reason_code?: string;
     promptPlan?: { promptHash: string; promptVersion: string; latencyMs: number };
     promptFull?: { promptHash: string; promptVersion: string; latencyMs: number };
     stubsCount?: number;

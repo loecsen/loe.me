@@ -1,12 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { buildImageCacheKey, findCachedImageByKey, getCachedImage } from '../lib/images/imageCache';
+import {
+  buildImageCacheKey,
+  findCachedImageByKey,
+  getCachedImage,
+  setCachedImage,
+} from '../lib/images/imageCache';
 import { buildPlanImageKey, requestMissionImage } from '../lib/images/utils';
 import { getSelectedStyleId } from '../lib/images/styleSelection';
-import { getImageStyleSnapshot, hasImageStyle } from '../lib/images/styles';
+import { getImageStyleSnapshot } from '../lib/images/styles';
 
 type PlanImageProps = {
+  ritualId?: string;
   intention: string;
   title?: string;
   styleId?: string;
@@ -16,6 +22,7 @@ type PlanImageProps = {
 };
 
 export default function PlanImage({
+  ritualId,
   intention,
   title,
   styleId,
@@ -39,7 +46,16 @@ export default function PlanImage({
       if (!intention.trim()) {
         return;
       }
-      const key = await buildPlanImageKey(intention.trim());
+      const key = ritualId ? `ritual_${ritualId}` : await buildPlanImageKey(intention.trim());
+      if (ritualId) {
+        const directCached = getCachedImage(key);
+        if (directCached) {
+          if (isMounted) {
+            setImageUrl(directCached);
+          }
+          return;
+        }
+      }
       const fallbackCached = findCachedImageByKey(key);
       if (fallbackCached) {
         if (isMounted) {
@@ -47,14 +63,7 @@ export default function PlanImage({
         }
         return;
       }
-      const hasSnapshot = Boolean(styleId || styleVersion || stylePrompt);
-      if (!hasSnapshot) {
-        return;
-      }
       const resolvedStyleId = styleId ?? getSelectedStyleId();
-      if (!hasImageStyle(resolvedStyleId)) {
-        return;
-      }
       const style = getImageStyleSnapshot(resolvedStyleId, styleVersion, stylePrompt);
       const cacheKey = buildImageCacheKey(style, key);
       const cached = getCachedImage(cacheKey);
@@ -70,9 +79,14 @@ export default function PlanImage({
         summary: prompt,
         promptOverride: stylePrompt,
       });
-      const resolved = result?.imageUrl ?? result?.imageDataUrl ?? null;
-      if (isMounted && resolved) {
-        setImageUrl(resolved);
+      const resolved = result?.imageDataUrl ?? result?.imageUrl ?? null;
+      if (resolved) {
+        if (ritualId) {
+          setCachedImage(key, resolved);
+        }
+        if (isMounted) {
+          setImageUrl(resolved);
+        }
       }
       if (isMounted && !resolved && retryCount < 2) {
         setTimeout(() => {
@@ -91,7 +105,7 @@ export default function PlanImage({
     return () => {
       isMounted = false;
     };
-  }, [intention, prompt, retryCount, styleId, stylePrompt, styleVersion]);
+  }, [intention, prompt, retryCount, ritualId, styleId, stylePrompt, styleVersion]);
 
   return (
     <div className={`plan-image ${className ?? ''}`}>

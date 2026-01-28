@@ -2,6 +2,7 @@ import type { DomainPlaybook } from '../domains/registry';
 
 type PlanPromptInput = {
   userGoal: string;
+  originalGoal?: string;
   days: number;
   userLang: string;
   playbooks: DomainPlaybook[];
@@ -19,6 +20,7 @@ export const PLAN_PROMPT_VERSION = 'plan_v1.1';
 
 export function buildPlanPrompt({
   userGoal,
+  originalGoal,
   days,
   userLang,
   playbooks,
@@ -131,13 +133,18 @@ Constraints:
 - domainPlaybookVersion must match the chosen playbook version.
 - axis must be strictly one of: "understand" | "do" | "perceive" | "consolidate".
 - effortType carries "read/listen/speak/quiz/practice" (do NOT put these in axis).
+- If the goal is already clarified, DO NOT output needsClarification=true.
 - Mapping rules:
   - Language learning → domainId "language"
   - Tennis, running, gym, swimming, workout → "fitness_sport"
-  - Meditation, mindfulness, breathing → "wellbeing_meditation"
+  - Meditation, stress, sleep, calm → "wellbeing_mind"
+  - Practical skill (guitar, piano, chess, drawing, coding) → "skill_performance"
   - Coding, programming → "tech_coding"
   - Music practice → "music_practice"
   - Otherwise → "personal_productivity"
+- Domain guidance:
+  - skill_performance: micro-drills, clear gestures, quick self-checks, no heavy theory.
+  - wellbeing_mind: breathing, grounding, short journaling, calm routines, no heavy quiz.
 - pathSummary: 1 sentence, concrete, no quotes, include the marker [[WM_PLAN_V1]], avoid vague terms (no “rituel doux”).
 - pathTitle must include the exact target skill and level/timeframe (e.g., "Greek A1 in 14 days", "Chinese beginner tones", "Tennis serve").
 - Never reuse pathSummary as any mission summary.
@@ -213,7 +220,7 @@ Minimal example:
 }
 `;
 
-  const user = `Goal: "${userGoal}".
+  const user = `Goal: "${userGoal}"${originalGoal ? ` (clarified from: "${originalGoal}")` : ''}.
 Days: ${days}.
 Goal hint: ${goalHint ?? 'none'}.
 Context hint: ${contextHint ?? 'none'}.

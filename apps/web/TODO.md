@@ -1,3 +1,6 @@
+# TODO
+
+- Realism Gate: enrich keyword sets + consider DB-backed i18n later.
 # Tech debt
 
 - Replace <img> usage with next/image where appropriate.

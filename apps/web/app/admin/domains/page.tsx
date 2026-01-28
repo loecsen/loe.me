@@ -24,6 +24,7 @@ type DomainPlaybook = {
   label: string;
   version: number;
   profile: { label: string; intent: string; audience?: string };
+  intentHints?: string[];
   allowedEffortTypes: EffortType[];
   weights: Partial<Record<EffortType, number>>;
   rules: string[];
@@ -265,6 +266,15 @@ export default function AdminDomainsPage() {
                     ...draft,
                     profile: { ...draft.profile, audience: event.target.value },
                   })
+                }
+              />
+
+              <label className="input-label">Intent hints / examples (one per line)</label>
+              <textarea
+                rows={3}
+                value={toLines(draft.intentHints ?? [])}
+                onChange={(event) =>
+                  setDraft({ ...draft, intentHints: fromLines(event.target.value) })
                 }
               />
 

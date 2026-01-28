@@ -3,6 +3,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getDataPath } from '../../../lib/storage/fsStore';
 
+export const runtime = 'nodejs';
+
 const findImageByHash = async (hash: string): Promise<string | null> => {
   const imagesDir = getDataPath('images');
   try {
@@ -26,7 +28,8 @@ export async function GET(request: Request) {
   }
   try {
     const buffer = await fs.readFile(filePath);
-    return new NextResponse(buffer, {
+    const body = new Uint8Array(buffer);
+    return new NextResponse(body, {
       status: 200,
       headers: {
         'Content-Type': 'image/png',

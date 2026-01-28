@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getLocaleFromAcceptLanguage, normalizeLocale } from '../../../lib/i18n';
 import type { LearningPathBlueprintV2, MissionBlueprintV2, PassCriteria } from '@loe/core';
 
+export const runtime = 'nodejs';
+
 type RawBlock =
   | { type: 'text'; text: string }
   | { type: 'checklist'; items: string[] }

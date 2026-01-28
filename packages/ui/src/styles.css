@@ -1,21 +1,33 @@
+/* Design tokens — single source: tokens.json. Synced for CSS variables. */
 :root {
   color-scheme: light;
+
+  /* Colors (semantic) */
   --loe-color-background: #ffffff;
   --loe-color-surface: #f9fafb;
+  --loe-color-surface-muted: #f5f6f9;
   --loe-color-text: #1f2937;
+  --loe-color-text-secondary: #1d2430;
   --loe-color-muted: #6b7280;
+  --loe-color-muted-light: #9aa2ac;
+  --loe-color-muted-lighter: #7b8190;
   --loe-color-border: #e5e7eb;
+  --loe-color-border-light: #eef1f5;
+  --loe-color-border-lighter: #edf0f5;
   --loe-color-accent: #dbe7ff;
   --loe-color-accent-strong: #b8ccff;
   --loe-color-accent-warm: #ffe9d6;
   --loe-color-accent-mint: #dff5ef;
+  --loe-color-accent-purple: #7b56ff;
+  --loe-color-accent-purple-light: #c7b7ff;
+  --loe-color-focus-ring: rgba(198, 176, 255, 0.2);
+  --loe-color-white: #ffffff;
+  --loe-cta-gradient: linear-gradient(90deg, var(--loe-color-cta-gradient-start) 0%, var(--loe-color-cta-gradient-mid) 50%, var(--loe-color-cta-gradient-end) 100%);
+  --loe-color-cta-gradient-start: #ac54f1;
+  --loe-color-cta-gradient-mid: #ec4799;
+  --loe-color-cta-gradient-end: #9934e5;
 
-  --loe-radius-xs: 6px;
-  --loe-radius-sm: 10px;
-  --loe-radius-md: 16px;
-  --loe-radius-lg: 24px;
-  --loe-radius-pill: 999px;
-
+  /* Spacing */
   --loe-space-xxs: 4px;
   --loe-space-xs: 8px;
   --loe-space-sm: 12px;
@@ -25,6 +37,22 @@
   --loe-space-xxl: 48px;
   --loe-space-huge: 72px;
 
+  /* Radius */
+  --loe-radius-xs: 6px;
+  --loe-radius-sm: 10px;
+  --loe-radius-md: 16px;
+  --loe-radius-lg: 24px;
+  --loe-radius-pill: 999px;
+
+  /* Shadows */
+  --loe-shadow-sm: 0 12px 24px rgba(31, 41, 55, 0.05);
+  --loe-shadow-md: 0 18px 36px rgba(31, 41, 55, 0.08);
+  --loe-shadow-lg: 0 24px 48px rgba(31, 41, 55, 0.05);
+  --loe-shadow-focus: 0 0 0 3px rgba(198, 176, 255, 0.2);
+  --loe-shadow-card: 0 12px 24px rgba(31, 41, 55, 0.05);
+  --loe-shadow-card-hover: 0 18px 32px rgba(31, 41, 55, 0.08);
+
+  /* Typography */
   --loe-font-family: 'Inter', 'SF Pro Display', -apple-system, system-ui, sans-serif;
   --loe-font-size-xs: 0.75rem;
   --loe-font-size-sm: 0.875rem;
@@ -40,4 +68,147 @@
   --loe-font-weight-regular: 400;
   --loe-font-weight-medium: 500;
   --loe-font-weight-semibold: 600;
+}
+
+/* Dark theme — structure prête (activer avec data-theme="dark" sur <html>) */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --loe-color-background: #1f2937;
+  --loe-color-surface: #111827;
+  --loe-color-surface-muted: #374151;
+  --loe-color-text: #f9fafb;
+  --loe-color-text-secondary: #e5e7eb;
+  --loe-color-muted: #9ca3af;
+  --loe-color-muted-light: #6b7280;
+  --loe-color-muted-lighter: #4b5563;
+  --loe-color-border: #374151;
+  --loe-color-border-light: #4b5563;
+  --loe-color-border-lighter: #374151;
+  --loe-color-white: #f9fafb;
+  --loe-shadow-sm: 0 12px 24px rgba(0, 0, 0, 0.25);
+  --loe-shadow-md: 0 18px 36px rgba(0, 0, 0, 0.3);
+  --loe-shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.35);
+  --loe-shadow-card: 0 12px 24px rgba(0, 0, 0, 0.2);
+  --loe-shadow-card-hover: 0 18px 32px rgba(0, 0, 0, 0.28);
+}
+
+/* UI components — tokens only */
+.loe-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--loe-space-sm);
+  padding: 0 var(--loe-space-xl);
+  height: 56px;
+  border-radius: var(--loe-radius-md);
+  border: none;
+  background: var(--loe-color-accent-purple);
+  color: var(--loe-color-white);
+  font-family: var(--loe-font-family);
+  font-size: var(--loe-font-size-md);
+  font-weight: var(--loe-font-weight-semibold);
+  cursor: pointer;
+  box-shadow: var(--loe-shadow-card);
+  transition: filter 150ms ease, box-shadow 150ms ease;
+}
+.loe-button:hover:not(:disabled) {
+  filter: contrast(1.08);
+  box-shadow: var(--loe-shadow-card-hover);
+}
+.loe-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.loe-button--secondary {
+  background: var(--loe-color-surface-muted);
+  color: var(--loe-color-text-secondary);
+}
+.loe-button--secondary:hover:not(:disabled) {
+  background: var(--loe-color-border-lighter);
+}
+.loe-button--text {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--loe-color-muted-lighter);
+}
+.loe-button--text:hover:not(:disabled) {
+  filter: none;
+  box-shadow: none;
+  color: var(--loe-color-muted);
+}
+.loe-button--cta {
+  background: var(--loe-cta-gradient);
+  color: var(--loe-color-white);
+}
+.loe-button--cta:hover:not(:disabled) {
+  filter: contrast(1.08);
+  box-shadow: var(--loe-shadow-card-hover);
+}
+
+.loe-card {
+  background: var(--loe-color-background);
+  border: 1px solid var(--loe-color-border-light);
+  border-radius: var(--loe-radius-sm);
+  padding: var(--loe-space-md) var(--loe-space-lg);
+  box-shadow: var(--loe-shadow-card);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.loe-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--loe-shadow-card-hover);
+}
+.loe-card__thumb {
+  border-radius: var(--loe-radius-sm);
+  overflow: hidden;
+  background: var(--loe-color-surface);
+  aspect-ratio: 16 / 9;
+}
+.loe-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--loe-radius-sm);
+}
+.loe-card__title {
+  font-weight: var(--loe-font-weight-semibold);
+  font-size: var(--loe-font-size-sm);
+  color: var(--loe-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loe-card__meta {
+  color: var(--loe-color-muted-light);
+  font-size: var(--loe-font-size-xs);
+}
+
+.loe-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--loe-space-xxs);
+  padding: var(--loe-space-xxs);
+  border-radius: var(--loe-radius-pill);
+  background: var(--loe-color-surface-muted);
+  border: 1px solid var(--loe-color-border-lighter);
+}
+.loe-tabs__tab {
+  border: none;
+  background: transparent;
+  padding: var(--loe-space-sm) var(--loe-space-md);
+  border-radius: var(--loe-radius-pill);
+  font-family: var(--loe-font-family);
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-medium);
+  color: var(--loe-color-muted-lighter);
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+.loe-tabs__tab:hover {
+  color: var(--loe-color-muted);
+}
+.loe-tabs__tab--active {
+  background: var(--loe-color-white);
+  color: var(--loe-color-text-secondary);
+  box-shadow: var(--loe-shadow-sm);
 }

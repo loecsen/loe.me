@@ -90,7 +90,7 @@ export default function NotificationsModal({ open, onClose }: NotificationsModal
                   setSettings({ ...settings, days: nextDays });
                 }}
               >
-                {t.weekdayShort[day]}
+                {t.weekdayShort[day as keyof typeof t.weekdayShort]}
               </button>
             ))}
           </div>

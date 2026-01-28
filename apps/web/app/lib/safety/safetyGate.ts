@@ -2,10 +2,6 @@ import { SAFETY_CHOICE_LABELS } from './safetyCopy';
 
 type SafetyStatus = 'ok' | 'needs_clarification' | 'blocked';
 type SafetyReasonCode =
-  | 'self_harm'
-  | 'violence'
-  | 'illegal_wrongdoing'
-  | 'hate_or_harassment'
   | 'sexual_non_goal'
   | 'insult_or_abuse'
   | 'not_a_goal'
@@ -104,54 +100,8 @@ const goalStems = [
   'impar',
 ];
 
-const selfHarmPatterns = [/suicid/i, /self[-\s]?harm/i, /kill myself/i];
-
-const violencePatterns = [
-  /\btuer\b/iu,
-  /\bassassiner\b/iu,
-  /\bmassacrer\b/iu,
-  /\bbuter\b/iu,
-  /\bégorger\b/iu,
-  /\bpoignarder\b/iu,
-  /\babattre\b/iu,
-  /\bexterminer\b/iu,
-  /\bfaire exploser\b/iu,
-  /\battentat\b/iu,
-  /\bkill\b/iu,
-  /\bmurder\b/iu,
-  /\bshoot\b/iu,
-  /\bstab\b/iu,
-  /\bmassacre\b/iu,
-  /\bexplosion\b/iu,
-  /\bassassinate\b/iu,
-];
-
-const violenceTargetPatterns = [
-  /\btout le monde\b/iu,
-  /\btous\b/iu,
-  /\bdes gens\b/iu,
-  /\bune personne\b/iu,
-  /\beveryone\b/iu,
-  /\ball people\b/iu,
-  /\bsomeone\b/iu,
-  /\ba person\b/iu,
-];
-
-const illegalPatterns = [
-  /how to hack/i,
-  /hack/i,
-  /phish/i,
-  /scam/i,
-  /steal/i,
-  /fraud/i,
-];
-
-const weaponPatterns = [/weapon/i, /make.*weapon/i, /gun/i, /bomb/i, /explos/i];
-
 const sexualExplicitPatterns = [/porn/i, /xxx/i, /nudes?/i];
 const minorPatterns = [/minor/i, /child/i, /kid/i, /teen/i];
-
-const otherBlockedPatterns = [/doxx/i, /blackmail/i, /extort/i, /terror/i];
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
@@ -228,64 +178,13 @@ export function runSafetyGate(intention: string, locale: string): SafetyGateResu
     };
   }
 
-  if (includesAny(lower, selfHarmPatterns)) {
-    return {
-      status: 'blocked',
-      reasonCode: 'self_harm',
-      quickChoices: [],
-    };
-  }
-
-  if (
-    includesAny(lower, violencePatterns) ||
-    (includesAny(lower, violenceTargetPatterns) &&
-      (includesAny(lower, violencePatterns) || includesAny(lower, weaponPatterns)))
-  ) {
-    return {
-      status: 'blocked',
-      reasonCode: 'violence',
-      quickChoices: [],
-    };
-  }
-
-  if (includesAny(lower, illegalPatterns)) {
-    return {
-      status: 'blocked',
-      reasonCode: 'illegal_wrongdoing',
-      quickChoices: [],
-    };
-  }
-
   const isSexualExplicit = includesAny(lower, sexualExplicitPatterns);
   const mentionsMinor = includesAny(lower, minorPatterns);
-  if (isSexualExplicit && mentionsMinor) {
+  if (isSexualExplicit || mentionsMinor) {
     return {
-      status: 'blocked',
+      status: 'needs_clarification',
       reasonCode: 'sexual_non_goal',
-      quickChoices: [],
-    };
-  }
-  if (isSexualExplicit) {
-    return {
-      status: 'blocked',
-      reasonCode: 'sexual_non_goal',
-      quickChoices: [],
-    };
-  }
-
-  if (includesAny(lower, weaponPatterns)) {
-    return {
-      status: 'blocked',
-      reasonCode: 'violence',
-      quickChoices: [],
-    };
-  }
-
-  if (includesAny(lower, otherBlockedPatterns)) {
-    return {
-      status: 'blocked',
-      reasonCode: 'other_blocked',
-      quickChoices: [],
+      quickChoices: buildQuickChoices(),
     };
   }
 
@@ -339,9 +238,9 @@ export function runSafetyGateSelfTest() {
       expect: { status: 'needs_clarification', reasonCode: 'too_long' },
     },
     {
-      name: 'suicide => self_harm',
-      result: runSafetyGate('suicide', 'en'),
-      expect: { status: 'blocked', reasonCode: 'self_harm' },
+      name: 'porn => sexual_non_goal',
+      result: runSafetyGate('porn', 'en'),
+      expect: { status: 'needs_clarification', reasonCode: 'sexual_non_goal' },
     },
     {
       name: 'réussir ma vie => vague',
