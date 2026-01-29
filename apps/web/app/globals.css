@@ -1,11 +1,15 @@
-/* Tokens + UI base importés dans layout.tsx via @loe/ui/styles.css */
+/*
+ * Design tokens (couleurs, espaces, radius, typo, ombres) : source unique dans
+ * @loe/ui/styles.css, importé dans layout.tsx avant ce fichier.
+ * Préférer var(--loe-*) aux valeurs en dur pour préparer la convergence Flutter.
+ */
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: linear-gradient(to bottom, #ffffff 0%, #e8e8f7 50%, #cd82a0 100%);
+  background: linear-gradient(to bottom, var(--loe-color-background) 0%, var(--loe-color-gradient-body-mid) 50%, var(--loe-color-gradient-body-end) 100%);
   color: var(--loe-color-text);
   font-family: var(--loe-font-family);
   letter-spacing: var(--loe-letter-spacing);
@@ -76,7 +80,7 @@ a {
 .locale-toggle {
   border-radius: var(--loe-radius-pill);
   border: 1px solid var(--loe-color-border);
-  background: #ffffff;
+  background: var(--loe-color-background);
   color: var(--loe-color-muted);
   padding: 6px 10px;
   font-size: var(--loe-font-size-xs);
@@ -86,12 +90,12 @@ a {
 .user-pill {
   border-radius: var(--loe-radius-pill);
   border: 1px solid var(--loe-color-border);
-  background: #ffffff;
-  padding: 8px 14px;
+  background: var(--loe-color-background);
+  padding: var(--loe-space-xs) 14px;
   font-size: var(--loe-font-size-sm);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--loe-space-xs);
   cursor: pointer;
 }
 
@@ -253,16 +257,16 @@ a {
 
 .debug-panel {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: var(--loe-space-md);
+  bottom: var(--loe-space-md);
   width: 320px;
   background: #14141f;
   color: #f5f5f7;
-  border-radius: 12px;
+  border-radius: var(--loe-radius-panel);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  padding: 12px;
+  padding: var(--loe-space-sm);
   z-index: 999;
-  font-size: 12px;
+  font-size: var(--loe-font-size-xs);
 }
 
 .debug-panel-header {
@@ -560,62 +564,6 @@ a {
   display: grid;
   gap: 24px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.clarify-panel {
-  max-width: 760px;
-  margin: 0 auto;
-  display: grid;
-  gap: var(--loe-space-md);
-  text-align: center;
-}
-
-.clarify-panel h2 {
-  margin: 0;
-}
-
-.clarify-grid {
-  display: grid;
-  gap: var(--loe-space-md);
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.clarify-card {
-  border: 1px solid #e9edf4;
-  border-radius: var(--loe-radius-lg);
-  background: #ffffff;
-  padding: var(--loe-space-lg);
-  display: grid;
-  gap: 8px;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-  transition: transform 160ms ease, box-shadow 160ms ease;
-  box-shadow: 0 12px 24px rgba(31, 41, 55, 0.05);
-}
-
-.clarify-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 32px rgba(31, 41, 55, 0.08);
-}
-
-.clarify-meta {
-  font-size: var(--loe-font-size-xs);
-  color: var(--loe-color-muted);
-}
-
-.clarify-other {
-  display: grid;
-  gap: var(--loe-space-sm);
-  text-align: left;
-}
-
-.clarify-other input {
-  width: 100%;
-  border-radius: var(--loe-radius-lg);
-  border: 1px solid #e5e9f0;
-  padding: 12px 14px;
-  font-family: inherit;
 }
 
 .mission-card {

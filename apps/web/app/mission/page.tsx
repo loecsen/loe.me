@@ -8,8 +8,6 @@ import MissionDashboard from './MissionDashboard';
 import PlanImage from '../components/PlanImage';
 import DebugDecisionPanel from '../components/DebugDecisionPanel';
 import { useI18n } from '../components/I18nProvider';
-import { buildClarificationSuggestions } from '../lib/domains/clarify';
-import { SAFETY_REASON_COPY, SAFETY_CHOICE_LABELS } from '../lib/safety/safetyCopy';
 import { getImageStyle } from '../lib/images/styles';
 import { getSelectedStyleId } from '../lib/images/styleSelection';
 import {
@@ -49,21 +47,8 @@ type PendingRequest = {
 type MissionsResponse = {
   ritualId?: string;
   needsClarification?: boolean;
+  clarification?: { mode?: string; reason_code?: string };
   reason_code?: string;
-  choices?: Array<{
-    id?: string;
-    label_key?: string;
-    labelKey?: string;
-    label?: string;
-    intention: string;
-  }>;
-  suggestions?: Array<{
-    id: string;
-    title: string;
-    subtitle: string;
-    intention: string;
-    domainHint: string;
-  }>;
   path: LearningPath & {
     domainId?: string;
     domainProfile?: string;
@@ -82,6 +67,7 @@ type MissionsResponse = {
 };
 
 const PENDING_REQUEST_KEY = 'loe.pending_ritual_request';
+const PENDING_RESULT_KEY = 'loe.pending_ritual_result';
 
 const toLegacyBlueprint = (path: LearningPath): LearningPathBlueprintV2 => ({
   id: path.id,
@@ -110,31 +96,10 @@ export default function MissionPage() {
   const [active, setActive] = useState<ActiveRitualResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
-  const [clarifySuggestions, setClarifySuggestions] = useState<
-    ReturnType<typeof buildClarificationSuggestions> | null
-  >(null);
-  const [customClarification, setCustomClarification] = useState('');
-  const [clarifyReason, setClarifyReason] = useState<string | null>(null);
   const [creatingErrorReason, setCreatingErrorReason] = useState<string | null>(null);
-  const [creatingStatus, setCreatingStatus] = useState<'idle' | 'clarify' | 'generating' | 'error'>(
-    'idle',
-  );
+  const [creatingStatus, setCreatingStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [debugTrace, setDebugTrace] = useState<TraceEvent[] | null>(null);
   const inflightRef = useRef(false);
-
-  const getCopy = (key: string) => (t as unknown as Record<string, string>)[key] ?? key;
-
-  const getClarifyCopy = (reason: string | null) => {
-    const entry =
-      (reason && (SAFETY_REASON_COPY as Record<string, { titleKey: string; bodyKey: string }>)[
-        reason
-      ]) ||
-      SAFETY_REASON_COPY.default;
-    return {
-      title: getCopy(entry.titleKey),
-      body: getCopy(entry.bodyKey),
-    };
-  };
 
   const isCreating = searchParams.get('creating') === '1';
   const ritualIdParam = searchParams.get('ritualId') ?? '';
@@ -183,13 +148,143 @@ export default function MissionPage() {
   }, [isCreating]);
 
   useEffect(() => {
-    if (!isCreating || typeof window === 'undefined') {
-      return;
-    }
-    if (pendingRequest || clarifySuggestions) {
-      return;
-    }
+    if (!isCreating || typeof window === 'undefined') return;
+    if (pendingRequest) return;
     try {
+      const resultRaw = window.sessionStorage.getItem(PENDING_RESULT_KEY);
+      if (resultRaw) {
+        const data = JSON.parse(resultRaw) as MissionsResponse;
+        const requestRaw = window.sessionStorage.getItem(PENDING_REQUEST_KEY);
+        if (!requestRaw) {
+          window.sessionStorage.removeItem(PENDING_RESULT_KEY);
+          router.replace('/');
+          return;
+        }
+        const pending = JSON.parse(requestRaw) as PendingRequest;
+        const ritualId = data.ritualId ?? pending.ritualId;
+        if (!ritualId || !data.path || !Array.isArray(data.missionStubs)) {
+          window.sessionStorage.removeItem(PENDING_RESULT_KEY);
+          window.sessionStorage.removeItem(PENDING_REQUEST_KEY);
+          router.replace('/');
+          return;
+        }
+        const legacyBlueprint = toLegacyBlueprint(data.path);
+        const pathState = recomputeStates({
+          blueprint: legacyBlueprint,
+          progress: buildInitialProgress(legacyBlueprint),
+        });
+        const fullMissions = new Map((data.missions ?? []).map((m: MissionFull) => [m.id, m]));
+        const missionsByIdSource = (data.missions ?? []).reduce<Record<string, MissionFull>>(
+          (acc, m: MissionFull) => {
+            acc[m.id] = m;
+            return acc;
+          },
+          {},
+        );
+        const mergedMissions = data.missionStubs.map((stub) => {
+          const full = fullMissions.get(stub.id);
+          if (full) {
+            return {
+              ...stub,
+              blocks: full.blocks,
+              generatedAt: new Date().toISOString(),
+              contentStatus: 'ready',
+            };
+          }
+          return { ...stub, contentStatus: 'missing' };
+        });
+        const styleId = getSelectedStyleId();
+        const style = getImageStyle(styleId);
+        const now = new Date().toISOString();
+        const record: RitualRecord = {
+          ritualId,
+          intention: pending.intention.trim(),
+          days: pending.days,
+          status: 'ready',
+          createdAt: now,
+          updatedAt: now,
+          clarification: pending.clarification,
+          pathTitle: data.path.pathTitle,
+          pathSummary: data.path.pathSummary,
+          pathDescription: data.path.pathDescription,
+          feasibilityNote: data.path.feasibilityNote,
+          previewStubs: data.missionStubs.slice(0, 4).map((stub) => {
+            const stubWithMeta = stub as MissionStub & {
+              dayIndex?: number;
+              effortType?: string;
+              estimatedMinutes?: number;
+            };
+            return {
+              title: stub.title,
+              summary: stub.summary,
+              effortType: stubWithMeta.effortType ?? 'practice',
+              estimatedMinutes: stubWithMeta.estimatedMinutes ?? 10,
+              dayIndex: stubWithMeta.dayIndex,
+            };
+          }),
+          imageStyleId: style.id,
+          imageStyleVersion: style.version,
+          imageStylePrompt: style.prompt,
+          path: pathState,
+          missions: mergedMissions,
+          pathSource: data.path,
+          missionStubsSource: data.missionStubs,
+          missionsByIdSource,
+          debugMeta: data.debugMeta,
+        };
+        const rawIndex = window.localStorage.getItem(RITUAL_INDEX_KEY);
+        const list = rawIndex ? (JSON.parse(rawIndex) as RitualIndexItem[]) : [];
+        const indexItem: RitualIndexItem = {
+          ritualId: record.ritualId,
+          intention: record.intention,
+          days: record.days,
+          status: record.status,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+          clarification: record.clarification,
+          pathTitle: record.pathTitle,
+          pathSummary: record.pathSummary,
+          pathDescription: record.pathDescription,
+          feasibilityNote: record.feasibilityNote,
+          previewStubs: record.previewStubs,
+          imageStyleId: record.imageStyleId,
+          imageStyleVersion: record.imageStyleVersion,
+          imageStylePrompt: record.imageStylePrompt,
+          debugMeta: record.debugMeta,
+        };
+        const nextIndex = [indexItem, ...list.filter((i: RitualIndexItem) => i.ritualId !== ritualId)];
+        window.localStorage.setItem(buildRitualStorageKey(ritualId), JSON.stringify(record));
+        window.localStorage.setItem(RITUAL_INDEX_KEY, JSON.stringify(nextIndex));
+        window.localStorage.setItem(
+          'loe.ritual',
+          JSON.stringify({
+            ritualId,
+            intention: record.intention,
+            days: record.days,
+            proposal: null,
+            createdAt: record.createdAt,
+            lastActiveAt: now,
+          }),
+        );
+        window.localStorage.setItem(
+          'loe.missionData',
+          JSON.stringify({
+            ritualId,
+            ritualKey: `${record.intention}::${record.days}`,
+            generatedAt: now,
+            path: pathState,
+            missions: mergedMissions,
+            sourcePath: data.path,
+            sourceMissionStubs: data.missionStubs,
+            sourceMissionsById: missionsByIdSource,
+          }),
+        );
+        window.sessionStorage.setItem('loe.active_ritual_id', ritualId);
+        window.sessionStorage.removeItem(PENDING_REQUEST_KEY);
+        window.sessionStorage.removeItem(PENDING_RESULT_KEY);
+        router.replace('/mission?start=1&ready=1');
+        return;
+      }
       const raw = window.sessionStorage.getItem(PENDING_REQUEST_KEY);
       if (!raw) {
         router.replace('/');
@@ -205,7 +300,7 @@ export default function MissionPage() {
     } catch {
       router.replace('/');
     }
-  }, [clarifySuggestions, isCreating, pendingRequest, ritualIdParam, router]);
+  }, [isCreating, pendingRequest, ritualIdParam, router]);
 
   useEffect(() => {
     if (!isCreating || creatingStatus !== 'generating' || !pendingRequest) {
@@ -257,67 +352,20 @@ export default function MissionPage() {
         }
         const clarifyPayload =
           payload?.data && typeof payload.data === 'object' && 'needsClarification' in payload.data
-            ? (payload.data as { needsClarification?: boolean; choices?: unknown })
+            ? (payload.data as { needsClarification?: boolean; clarification?: { mode?: string; reason_code?: string }; debugTrace?: TraceEvent[] })
             : payload && typeof payload === 'object' && 'needsClarification' in payload
-              ? (payload as { needsClarification?: boolean; choices?: unknown })
+              ? (payload as { needsClarification?: boolean; clarification?: { mode?: string; reason_code?: string }; debugTrace?: TraceEvent[] })
               : null;
-        if (clarifyPayload && typeof clarifyPayload === 'object' && 'debugTrace' in clarifyPayload) {
-          const debugPayload = clarifyPayload as { debugTrace?: TraceEvent[] };
-          if (debugPayload.debugTrace) {
-            setDebugTrace(debugPayload.debugTrace);
-          }
+        if (clarifyPayload && clarifyPayload.debugTrace) {
+          setDebugTrace(clarifyPayload.debugTrace);
         }
-        if (clarifyPayload?.needsClarification) {
-          const choices = (clarifyPayload as {
-            choices?: Array<{
-              id?: string;
-              label_key?: string;
-              labelKey?: string;
-              label?: string;
-              intention: string;
-            }>;
-          }).choices;
-          if (choices && choices.length > 0) {
-            setClarifySuggestions(
-              choices.map((choice, index) => {
-                const labelKey =
-                  choice.label_key ||
-                  choice.labelKey ||
-                  (choice.id &&
-                    (SAFETY_CHOICE_LABELS as Record<string, string | undefined>)[choice.id]) ||
-                  '';
-                const label =
-                  (labelKey && getCopy(labelKey)) ||
-                  choice.label ||
-                  choice.intention ||
-                  '';
-                return {
-                  id: choice.id ?? `choice-${index + 1}`,
-                  title: label,
-                  subtitle: '',
-                  intention: choice.intention || label,
-                  domainHint: 'personal_productivity',
-                };
-              }),
-            );
-          } else {
-            if (process.env.NODE_ENV !== 'production') {
-              console.warn('[safety] choices missing, falling back to suggestions');
-            }
-            setClarifySuggestions(
-              (clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
-                .suggestions && (clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
-                .suggestions!.length > 0
-                ? ((clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
-                    .suggestions as ReturnType<typeof buildClarificationSuggestions>)
-                : buildClarificationSuggestions(pendingRequest.intention),
-            );
-          }
-          setClarifyReason(
-            (clarifyPayload as { reason_code?: string }).reason_code ?? 'vague',
-          );
-          setCreatingStatus('clarify');
+        if (clarifyPayload?.needsClarification && clarifyPayload?.clarification?.mode === 'inline') {
+          const reasonCode = clarifyPayload.clarification?.reason_code ?? 'not_actionable_inline';
+          window.sessionStorage.removeItem(PENDING_REQUEST_KEY);
           inflightRef.current = false;
+          router.replace(
+            `/?inlineClarify=1&intention=${encodeURIComponent(pendingRequest.intention)}&reason_code=${encodeURIComponent(reasonCode)}`,
+          );
           return;
         }
         const data = payload.data;
@@ -449,37 +497,6 @@ export default function MissionPage() {
     run();
   }, [creatingStatus, isCreating, locale, pendingRequest, router]);
 
-  const handleClarificationSelect = (
-    nextIntention: string,
-    chosenLabel: string,
-    chosenDomainId: string,
-  ) => {
-    if (!pendingRequest || typeof window === 'undefined') return;
-    const nextPayload: PendingRequest = {
-      ...pendingRequest,
-      clarification: {
-        originalIntention: pendingRequest.intention,
-        chosenLabel,
-        chosenDomainId,
-        chosenIntention: nextIntention,
-        createdAt: new Date().toISOString(),
-      },
-    };
-    window.sessionStorage.setItem(PENDING_REQUEST_KEY, JSON.stringify(nextPayload));
-    setPendingRequest(nextPayload);
-    setClarifySuggestions(null);
-    setClarifyReason(null);
-    setCreatingStatus('generating');
-  };
-
-  const handleClarificationCustom = () => {
-    if (!pendingRequest) return;
-    const trimmed = customClarification.trim();
-    if (!trimmed) return;
-    const next = `${pendingRequest.intention} → ${trimmed}`;
-    handleClarificationSelect(next, 'Autre (je précise en 1 phrase)', 'personal_productivity');
-  };
-
   const creationIntro = useMemo(() => {
     if (!pendingRequest) return null;
     return (
@@ -500,51 +517,7 @@ export default function MissionPage() {
           <p>Tu peux rester ici, on s’occupe du reste.</p>
         </div>
         {creatingStatus === 'generating' && !creatingErrorReason && creationIntro}
-        {creatingStatus === 'clarify' && clarifySuggestions && !creatingErrorReason ? (
-          <div className="clarify-panel">
-            <h2>{getClarifyCopy(clarifyReason).title}</h2>
-            <p>{getClarifyCopy(clarifyReason).body}</p>
-            <div className="clarify-grid">
-              {clarifySuggestions.map((suggestion) => (
-                <button
-                  key={suggestion.id}
-                  type="button"
-                  className="clarify-card"
-                  onClick={() =>
-                    handleClarificationSelect(
-                      suggestion.intention,
-                      suggestion.title,
-                      suggestion.domainHint,
-                    )
-                  }
-                >
-                  <strong>{suggestion.title}</strong>
-                  <span>{suggestion.subtitle}</span>
-                </button>
-              ))}
-            </div>
-            <div className="clarify-other">
-              <label className="input-label" htmlFor="clarify-other-input">
-                {t.clarifyOtherLabel}
-              </label>
-              <input
-                id="clarify-other-input"
-                type="text"
-                value={customClarification}
-                onChange={(event) => setCustomClarification(event.target.value)}
-                placeholder={t.clarifyOtherPlaceholder}
-              />
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={!customClarification.trim()}
-                onClick={handleClarificationCustom}
-              >
-                {t.clarifyOtherCta}
-              </button>
-            </div>
-          </div>
-        ) : creatingStatus === 'error' && creatingErrorReason ? (
+        {creatingStatus === 'error' && creatingErrorReason ? (
           <div className="creating-preview-card">
             <h2>{t.safetyGateBlockedTitle}</h2>
             <p>{t.safetyGateBlockedBody}</p>
@@ -567,13 +540,7 @@ export default function MissionPage() {
         {debugTrace ? (
           <DebugDecisionPanel
             trace={debugTrace}
-            status={
-              creatingErrorReason
-                ? 'BLOCKED'
-                : creatingStatus === 'clarify'
-                  ? 'NEEDS_CLARIFICATION'
-                  : 'OK'
-            }
+            status={creatingErrorReason ? 'BLOCKED' : 'OK'}
           />
         ) : null}
       </section>

@@ -23,7 +23,7 @@ import { loadOverrides, resolvePlaybooks, validatePlaybooks } from '../../../lib
 import { buildPlanPrompt, PLAN_PROMPT_VERSION } from '../../../lib/prompts/planPrompt';
 import { sha256 } from '../../../lib/storage/fsStore';
 import { enrichIntention, inferDomainContext } from '../../../lib/domains/infer';
-import { buildClarificationSuggestions, needsClarification } from '../../../lib/domains/clarify';
+import { runActionabilityV2 } from '../../../lib/actionability';
 import { runSafetyGate } from '../../../lib/safety/safetyGate';
 import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
 import { runRealismGate } from '../../../lib/realism/realismGate';
@@ -391,13 +391,39 @@ export async function POST(request: Request) {
     if (rawIntention.length > 350) {
       return NextResponse.json({
         needsClarification: true,
-        reason_code: 'too_long',
-        choices: [],
+        clarification: { mode: 'inline', reason_code: 'too_long' },
+        debug: {},
       });
     }
 
     const debugEnabled = process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production';
     const trace: TraceEvent[] | undefined = debugEnabled ? [] : undefined;
+
+    const actionabilityResult = runActionabilityV2(rawIntention);
+    if (debugEnabled && trace) {
+      pushTrace(trace, {
+        gate: 'actionability_v2',
+        outcome: actionabilityResult.action === 'actionable' ? 'ok' : 'needs_clarification',
+        reason_code: actionabilityResult.reason_code,
+        meta: { actionability_v2: actionabilityResult.debug },
+      });
+    }
+    if (actionabilityResult.action !== 'actionable') {
+      return NextResponse.json({
+        data: {
+          needsClarification: true,
+          clarification: {
+            mode: 'inline',
+            reason_code:
+              actionabilityResult.action === 'not_actionable_inline'
+                ? actionabilityResult.reason_code
+                : 'borderline_actionable',
+          },
+          debug: { actionability_v2: actionabilityResult },
+        },
+        ...(debugEnabled ? { debugTrace: trace } : {}),
+      });
+    }
 
     const { guard: lexiconGuard } = await getLexiconGuard();
     const safetyVerdict = await runSafetyV2({
@@ -426,50 +452,22 @@ export async function POST(request: Request) {
     const gate = runSafetyGate(rawIntention, resolvedLocale);
     if (gate.status === 'needs_clarification') {
       pushTrace(trace, {
-        gate: 'clarification_v1',
+        gate: 'safety_gate',
         outcome: 'needs_clarification',
         reason_code: gate.reasonCode,
         meta: { source: 'safety_gate' },
       });
       return NextResponse.json({
-        needsClarification: true,
-        reason_code: gate.reasonCode,
-        choices: gate.quickChoices,
-        suggestions: gate.quickChoices.map((choice, index) => ({
-          id: `gate-${index + 1}`,
-          title: choice.label_key,
-          subtitle: '',
-          intention: choice.intention,
-          domainHint: 'personal_productivity',
-        })),
+        data: {
+          needsClarification: true,
+          clarification: { mode: 'inline', reason_code: gate.reasonCode },
+          debug: {},
+        },
         ...(debugEnabled ? { debugTrace: trace } : {}),
       });
     }
 
     const safeIntention = safeText(gate.cleanIntention ?? rawIntention, 'Apprendre avec constance');
-
-    if (!clarification && needsClarification(safeIntention)) {
-      pushTrace(trace, {
-        gate: 'clarification_v1',
-        outcome: 'needs_clarification',
-        reason_code: 'vague',
-        meta: { source: 'heuristic' },
-      });
-      return NextResponse.json({
-        data: {
-          needsClarification: true,
-          reason_code: 'vague',
-          intention: safeIntention,
-          choices: [],
-          suggestions: buildClarificationSuggestions(safeIntention),
-        },
-        ...(debugEnabled ? { debugTrace: trace } : {}),
-      });
-    }
-    pushTrace(trace, {
-      gate: 'clarification_v1',
-      outcome: 'ok',
-    });
 
     const realismGate = runRealismGate(
       safeIntention,
@@ -484,16 +482,11 @@ export async function POST(request: Request) {
         meta: { choices: realismGate.choices.map((choice) => choice.label_key) },
       });
       return NextResponse.json({
-        needsClarification: true,
-        reason_code: 'unrealistic',
-        choices: realismGate.choices,
-        suggestions: realismGate.choices.map((choice, index) => ({
-          id: `realism-${index + 1}`,
-          title: choice.label_key,
-          subtitle: '',
-          intention: choice.intention,
-          domainHint: 'personal_productivity',
-        })),
+        data: {
+          needsClarification: true,
+          clarification: { mode: 'inline', reason_code: 'unrealistic' },
+          debug: {},
+        },
         ...(debugEnabled ? { debugTrace: trace } : {}),
       });
     }

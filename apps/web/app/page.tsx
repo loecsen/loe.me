@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@loe/ui';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Button, Container } from '@loe/ui';
 import { useI18n } from './components/I18nProvider';
 import RitualHistory from './components/RitualHistory';
 import styles from './page.module.css';
@@ -24,11 +24,31 @@ const getNearestDayOption = (value: number) => {
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t, locale } = useI18n();
   const [intention, setIntention] = useState('');
   const [selectedDays, setSelectedDays] = useState<number | null>(14);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [lastSubmittedIntent, setLastSubmittedIntent] = useState('');
+  const [inlineHint, setInlineHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    const inlineClarify = searchParams.get('inlineClarify') === '1';
+    const intentionParam = searchParams.get('intention');
+    const reasonCode = searchParams.get('reason_code');
+    if (inlineClarify && intentionParam != null) {
+      const decoded = decodeURIComponent(intentionParam);
+      setIntention(decoded);
+      setLastSubmittedIntent(decoded);
+      const hint =
+        reasonCode === 'single_term'
+          ? (t as { inlineClarifyHintSingleTerm?: string }).inlineClarifyHintSingleTerm ?? (t as { inlineClarifyHint?: string }).inlineClarifyHint
+          : (t as { inlineClarifyHint?: string }).inlineClarifyHint;
+      setInlineHint(hint ?? null);
+      router.replace('/', { scroll: false });
+    }
+  }, [searchParams, router, t]);
 
   const isFrench = locale?.startsWith('fr');
   const placeholderText = useMemo(
@@ -66,6 +86,7 @@ export default function HomePage() {
   const ctaCopy = isFrench ? 'Créer mon parcours →' : 'Create my learning path →';
 
   const PENDING_REQUEST_KEY = 'loe.pending_ritual_request';
+  const PENDING_RESULT_KEY = 'loe.pending_ritual_result';
 
   const createRitualId = () => {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -102,24 +123,72 @@ export default function HomePage() {
     }
     setIsSubmitting(true);
     setSubmitError(null);
+    setInlineHint(null);
     const ritualId = createRitualId();
-    const ok = storePendingRequest({
-      ritualId,
-      intention: intention.trim(),
-      days: finalDays,
-      locale,
-    });
-    setIsSubmitting(false);
-    if (!ok) {
+    try {
+      const res = await fetch('/api/missions/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intention: intention.trim(),
+          days: finalDays,
+          locale,
+          ritualId,
+        }),
+      });
+      const data = await res.json();
+      const payload = data?.data ?? data;
+      if (payload?.needsClarification && payload?.clarification?.mode === 'inline') {
+        setLastSubmittedIntent(intention.trim());
+        const reasonCode = payload.clarification?.reason_code;
+        const hint =
+          reasonCode === 'single_term'
+            ? (t as { inlineClarifyHintSingleTerm?: string }).inlineClarifyHintSingleTerm ?? t.inlineClarifyHint
+            : t.inlineClarifyHint;
+        setInlineHint(hint);
+        setIsSubmitting(false);
+        return;
+      }
+      if (data?.blocked) {
+        setSubmitError(data.reason_code ?? 'blocked');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!res.ok) {
+        setSubmitError(data?.details ?? data?.error ?? 'error');
+        setIsSubmitting(false);
+        return;
+      }
+      if (payload?.path && payload?.missionStubs) {
+        const ok = storePendingRequest({
+          ritualId,
+          intention: intention.trim(),
+          days: finalDays,
+          locale,
+        });
+        if (ok && typeof window !== 'undefined') {
+          try {
+            window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(payload));
+          } catch {
+            /* ignore */
+          }
+        }
+        setIsSubmitting(false);
+        router.push(`/mission?creating=1&ritualId=${ritualId}`);
+        return;
+      }
       setSubmitError('Impossible de lancer la génération.');
-      return;
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'error');
     }
-    router.push(`/mission?creating=1&ritualId=${ritualId}`);
+    setIsSubmitting(false);
   };
 
   return (
-    <section className={`home-shell ${styles.homeShell}`}>
-      <div className={styles.homeContainer}>
+    <>
+      <Container>
+        <section className={`home-shell ${styles.homeShell}`}>
+          <div className={styles.homeContainer}>
         <div className={styles.hero}>
           <h1 className={styles.heroTitle}>{t.homeTagline}</h1>
           <p className={styles.heroSubtitle}>{t.homeHeroTitle}</p>
@@ -136,6 +205,16 @@ export default function HomePage() {
                 onChange={(event) => setIntention(event.target.value)}
                 rows={3}
               />
+              {inlineHint && (
+                <>
+                  {lastSubmittedIntent && (
+                    <p className={styles.lastSubmitted}>
+                      {t.lastSubmittedLabel} {lastSubmittedIntent}
+                    </p>
+                  )}
+                  <p className={styles.inlineClarifyMessage}>{inlineHint}</p>
+                </>
+              )}
               <div className={styles.cardFooter}>
                 <button className={styles.addDocs} type="button" disabled>
                   {addDocsCopy}
@@ -241,16 +320,18 @@ export default function HomePage() {
           </div>
         </form>
 
-        <RitualHistory />
-
         <div className="home-admin-link">
           <a href="/admin/images?key=1">Retour à l’admin images</a>
           {' · '}
           <a href="/admin/domains?key=1">Admin domains</a>
           {' · '}
           <a href="/admin/safety?key=1">Admin safety</a>
+          </div>
         </div>
-      </div>
-    </section>
+        </section>
+      </Container>
+
+      <RitualHistory />
+    </>
   );
 }

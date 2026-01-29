@@ -51,9 +51,6 @@ export const translations = {
     realismGateTitleUnrealistic: "Let's make it realistic",
     realismGateBodyUnrealistic:
       "Here are achievable options. Pick one and I'll generate the ritual.",
-    clarifyOtherLabel: 'Other (I clarify in one sentence)',
-    clarifyOtherPlaceholder: 'Example: succeed in life → feel aligned and calm every day',
-    clarifyOtherCta: 'Launch with this clarification',
     safetyChoiceOrganize: 'Get organized in 10 minutes a day',
     safetyChoiceGuitar: 'Learn the basics of guitar in 30 days',
     safetyChoiceEnglish: 'Improve my spoken English for work',
@@ -96,6 +93,10 @@ export const translations = {
     homeValidatePlan: 'Validate this plan',
     homeModifyPlan: 'Modify this plan',
     homeStartOver: 'Start over',
+    inlineClarifyHint:
+      "It will be difficult to create a ritual with this request. Can you specify your goal (action + outcome)?",
+    inlineClarifyHintSingleTerm: 'Can you specify what you want to do, and in what context?',
+    lastSubmittedLabel: 'Last request:',
     homeMissionLabel: 'Mission',
     homeMissionFallback: 'Learning step',
     rhythmDaily: 'daily',
@@ -218,9 +219,6 @@ export const translations = {
     realismGateTitleUnrealistic: 'Rendons l’objectif réaliste',
     realismGateBodyUnrealistic:
       'Je te propose une version atteignable. Choisis une option, puis je génère le rituel.',
-    clarifyOtherLabel: 'Autre (je précise en 1 phrase)',
-    clarifyOtherPlaceholder: 'Ex: réussir ma vie → me sentir aligné et serein au quotidien',
-    clarifyOtherCta: 'Lancer avec cette précision',
     safetyChoiceOrganize: 'Mieux m’organiser en 10 minutes par jour',
     safetyChoiceGuitar: 'Apprendre les bases de la guitare en 30 jours',
     safetyChoiceEnglish: 'Améliorer mon anglais oral pour le travail',
@@ -246,6 +244,10 @@ export const translations = {
     ritualAdjustDaysLabel: 'Jours',
     ritualAdjustConfirm: 'Régénérer',
     ritualAdjustCancel: 'Annuler',
+    inlineClarifyHint:
+      "Il va être difficile de créer un rituel avec cette demande. Peux-tu préciser ton objectif (action + résultat) ?",
+    inlineClarifyHintSingleTerm: 'Peux-tu préciser ce que tu veux faire, et dans quel contexte ?',
+    lastSubmittedLabel: 'Dernière demande :',
     homeHistoryTitle: 'Historique local',
     homeHistorySubtitle: 'Ton dernier rituel est stocké sur cet appareil.',
     homeHistoryLoading: 'Chargement de ton historique local…',
@@ -384,9 +386,10 @@ export const translations = {
     realismGateTitleUnrealistic: 'Hagámoslo realista',
     realismGateBodyUnrealistic:
       'Aquí tienes opciones alcanzables. Elige una y genero el ritual.',
-    clarifyOtherLabel: 'Otro (lo aclaro en una frase)',
-    clarifyOtherPlaceholder: 'Ej: tener éxito en la vida → sentirme alineado y en calma cada día',
-    clarifyOtherCta: 'Lanzar con esta aclaración',
+    inlineClarifyHint:
+      'Será difícil crear un ritual con esta petición. ¿Puedes precisar tu objetivo (acción + resultado)?',
+    inlineClarifyHintSingleTerm: '¿Puedes precisar qué quieres hacer y en qué contexto?',
+    lastSubmittedLabel: 'Última petición:',
     safetyChoiceOrganize: 'Organizarme mejor en 10 minutos al día',
     safetyChoiceGuitar: 'Aprender lo básico de guitarra en 30 días',
     safetyChoiceEnglish: 'Mejorar mi inglés hablado para el trabajo',
@@ -551,9 +554,10 @@ export const translations = {
     realismGateTitleUnrealistic: 'Machen wir es realistisch',
     realismGateBodyUnrealistic:
       'Hier sind erreichbare Optionen. Wähle eine, dann erstelle ich das Ritual.',
-    clarifyOtherLabel: 'Andere (in einem Satz präzisieren)',
-    clarifyOtherPlaceholder: 'Beispiel: im Leben erfolgreich sein → mich täglich ruhig und klar fühlen',
-    clarifyOtherCta: 'Mit dieser Präzisierung starten',
+    inlineClarifyHint:
+      'Es wird schwierig sein, mit dieser Anfrage ein Ritual zu erstellen. Kannst du dein Ziel (Aktion + Ergebnis) präzisieren?',
+    inlineClarifyHintSingleTerm: 'Kannst du präzisieren, was du tun möchtest und in welchem Kontext?',
+    lastSubmittedLabel: 'Letzte Anfrage:',
     safetyChoiceOrganize: 'Besser organisieren in 10 Minuten pro Tag',
     safetyChoiceGuitar: 'Die Grundlagen der Gitarre in 30 Tagen lernen',
     safetyChoiceEnglish: 'Mein gesprochenes Englisch für die Arbeit verbessern',
@@ -718,9 +722,10 @@ export const translations = {
     realismGateTitleUnrealistic: 'Rendiamolo realistico',
     realismGateBodyUnrealistic:
       'Ecco opzioni raggiungibili. Scegline una e genero il rituale.',
-    clarifyOtherLabel: 'Altro (lo chiarisco in una frase)',
-    clarifyOtherPlaceholder: 'Esempio: avere successo nella vita → sentirmi allineato e sereno ogni giorno',
-    clarifyOtherCta: 'Avvia con questa precisazione',
+    inlineClarifyHint:
+      'Sarà difficile creare un rituale con questa richiesta. Puoi precisare il tuo obiettivo (azione + risultato)?',
+    inlineClarifyHintSingleTerm: 'Puoi precisare cosa vuoi fare e in quale contesto?',
+    lastSubmittedLabel: 'Ultima richiesta:',
     safetyChoiceOrganize: 'Organizzarmi meglio in 10 minuti al giorno',
     safetyChoiceGuitar: 'Imparare le basi della chitarra in 30 giorni',
     safetyChoiceEnglish: 'Migliorare il mio inglese parlato per il lavoro',

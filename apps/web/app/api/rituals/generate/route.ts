@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getLocaleFromAcceptLanguage, normalizeLocale } from '../../../lib/i18n';
+import { runActionabilityV2 } from '../../../lib/actionability';
 import { runSafetyGate } from '../../../lib/safety/safetyGate';
 import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
 import type { TraceEvent } from '@loe/core';
@@ -110,14 +111,37 @@ export async function POST(request: Request) {
   if (rawIntention.length > MAX_CHARS) {
     return NextResponse.json({
       needsClarification: true,
-      reason_code: 'too_long',
-      choices: [],
-      suggestions: [],
+      clarification: { mode: 'inline', reason_code: 'too_long' },
+      debug: {},
     });
   }
 
   const debugEnabled = process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production';
   const trace: TraceEvent[] | undefined = debugEnabled ? [] : undefined;
+
+  const actionabilityResult = runActionabilityV2(rawIntention);
+  if (debugEnabled && trace) {
+    pushTrace(trace, {
+      gate: 'actionability_v2',
+      outcome: actionabilityResult.action === 'actionable' ? 'ok' : 'needs_clarification',
+      reason_code: actionabilityResult.reason_code,
+      meta: { actionability_v2: actionabilityResult.debug },
+    });
+  }
+  if (actionabilityResult.action !== 'actionable') {
+    return NextResponse.json({
+      needsClarification: true,
+      clarification: {
+        mode: 'inline',
+        reason_code:
+          actionabilityResult.action === 'not_actionable_inline'
+            ? actionabilityResult.reason_code
+            : 'borderline_actionable',
+      },
+      debug: { actionability_v2: actionabilityResult },
+      ...(debugEnabled ? { debugTrace: trace } : {}),
+    });
+  }
 
   const { guard: lexiconGuard } = await getLexiconGuard();
   const safetyVerdict = await runSafetyV2({
@@ -146,30 +170,18 @@ export async function POST(request: Request) {
   const gate = runSafetyGate(rawIntention, resolvedLocale);
   if (gate.status === 'needs_clarification') {
     pushTrace(trace, {
-      gate: 'clarification_v1',
+      gate: 'safety_gate',
       outcome: 'needs_clarification',
       reason_code: gate.reasonCode,
       meta: { source: 'safety_gate' },
     });
     return NextResponse.json({
       needsClarification: true,
-      reason_code: gate.reasonCode,
-      choices: gate.quickChoices,
-      suggestions: gate.quickChoices.map((choice, index) => ({
-        id: `gate-${index + 1}`,
-        title: choice.label_key,
-        subtitle: '',
-        intention: choice.intention,
-        domainHint: 'personal_productivity',
-      })),
+      clarification: { mode: 'inline', reason_code: gate.reasonCode },
+      debug: {},
       ...(debugEnabled ? { debugTrace: trace } : {}),
     });
   }
-
-  pushTrace(trace, {
-    gate: 'clarification_v1',
-    outcome: 'ok',
-  });
 
   const proposal = createMockProposal(rawIntention, days, resolvedLocale);
   return NextResponse.json({

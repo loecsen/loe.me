@@ -111,7 +111,7 @@ export default function AppShell({ children }: AppShellProps) {
         </Container>
       </header>
       <main className={`app-main${isHome ? ' app-main-home' : ''}`}>
-        <Container>{children}</Container>
+        {isHome ? children : <Container>{children}</Container>}
       </main>
       <AuthModal
         open={authOpen}

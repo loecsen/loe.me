@@ -17,8 +17,6 @@ import DebugDecisionPanel from '../../components/DebugDecisionPanel';
 import { buildPlanImageKey, requestMissionImage } from '../../lib/images/utils';
 import { getSelectedStyleId } from '../../lib/images/styleSelection';
 import { getImageStyle } from '../../lib/images/styles';
-import { buildClarificationSuggestions } from '../../lib/domains/clarify';
-import { SAFETY_REASON_COPY, SAFETY_CHOICE_LABELS } from '../../lib/safety/safetyCopy';
 import {
   buildRitualLockKey,
   buildRitualStorageKey,
@@ -54,6 +52,7 @@ type MissionsResponse = {
   ritualId?: string;
   ritualPath?: string;
   needsClarification?: boolean;
+  clarification?: { mode?: string; reason_code?: string };
   reason_code?: string;
   choices?: Array<{
     id?: string;
@@ -159,11 +158,6 @@ export default function RitualPage() {
   const [adjustGoal, setAdjustGoal] = useState('');
   const [adjustDays, setAdjustDays] = useState('');
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
-  const [clarifySuggestions, setClarifySuggestions] = useState<
-    ReturnType<typeof buildClarificationSuggestions> | null
-  >(null);
-  const [customClarification, setCustomClarification] = useState('');
-  const [clarifyReason, setClarifyReason] = useState<string | null>(null);
   const [debugTrace, setDebugTrace] = useState<TraceEvent[] | null>(null);
   const inflightRef = useRef(false);
 
@@ -212,7 +206,7 @@ export default function RitualPage() {
     if (!isCreating || !ritualId || typeof window === 'undefined') {
       return;
     }
-    if (record || clarifySuggestions) {
+    if (record) {
       return;
     }
     try {
@@ -244,7 +238,7 @@ export default function RitualPage() {
     } catch {
       router.replace('/');
     }
-  }, [clarifySuggestions, isCreating, record, ritualId, router]);
+  }, [isCreating, record, ritualId, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -457,62 +451,20 @@ export default function RitualPage() {
           'needsClarification' in payloadRecord &&
           Boolean(payloadRecord.needsClarification);
         const clarifyPayload = data?.needsClarification ? data : hasNeedsClarification ? payloadRecord : null;
-        if (clarifyPayload?.needsClarification) {
+        if (clarifyPayload?.needsClarification && (clarifyPayload as { clarification?: { mode?: string } })?.clarification?.mode === 'inline') {
           if (payloadDebugTrace) {
             setDebugTrace(payloadDebugTrace);
           }
-          const choices = (clarifyPayload as {
-            choices?: Array<{
-              id?: string;
-              label_key?: string;
-              labelKey?: string;
-              label?: string;
-              intention: string;
-            }>;
-          }).choices;
-          if (choices && choices.length > 0) {
-            setClarifySuggestions(
-              choices.map((choice, index) => {
-                const labelKey =
-                  choice.label_key ||
-                  choice.labelKey ||
-                  (choice.id &&
-                    (SAFETY_CHOICE_LABELS as Record<string, string | undefined>)[choice.id]) ||
-                  '';
-                const label =
-                  (labelKey && getCopy(labelKey)) ||
-                  choice.label ||
-                  choice.intention ||
-                  '';
-                return {
-                  id: choice.id ?? `choice-${index + 1}`,
-                  title: label,
-                  subtitle: '',
-                  intention: choice.intention || label,
-                  domainHint: 'personal_productivity',
-                };
-              }),
-            );
-          } else {
-            if (process.env.NODE_ENV !== 'production') {
-              console.warn('[safety] choices missing, falling back to suggestions');
-            }
-            setClarifySuggestions(
-              (clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
-                .suggestions && (clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
-                .suggestions!.length > 0
-                ? ((clarifyPayload as { suggestions?: ReturnType<typeof buildClarificationSuggestions> })
-                    .suggestions as ReturnType<typeof buildClarificationSuggestions>)
-                : buildClarificationSuggestions(record.intention),
-            );
-          }
-          setClarifyReason((clarifyPayload as { reason_code?: string }).reason_code ?? 'vague');
-          setRecord(null);
+          const reasonCode = (clarifyPayload as { clarification?: { reason_code?: string } })?.clarification?.reason_code ?? 'not_actionable_inline';
+          const intentionParam = encodeURIComponent(record.intention);
           try {
             window.localStorage.removeItem(buildRitualStorageKey(ritualId));
           } catch {
             // ignore
           }
+          router.replace(
+            `/?inlineClarify=1&intention=${intentionParam}&reason_code=${encodeURIComponent(reasonCode)}`,
+          );
           return;
         }
         if (!data?.path || !Array.isArray(data.missionStubs)) {
@@ -832,132 +784,7 @@ export default function RitualPage() {
   const formatTitle = (value: string) =>
     value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Ton rituel';
 
-  const getCopy = (key: string) => (t as unknown as Record<string, string>)[key] ?? key;
-
-  const getClarifyCopy = (reason: string | null) => {
-    const entry =
-      (reason && (SAFETY_REASON_COPY as Record<string, { titleKey: string; bodyKey: string }>)[
-        reason
-      ]) ||
-      SAFETY_REASON_COPY.default;
-    return {
-      title: getCopy(entry.titleKey),
-      body: getCopy(entry.bodyKey),
-    };
-  };
-
-  const handleClarificationSelect = (
-    nextIntention: string,
-    chosenLabel: string,
-    chosenDomainId: string,
-  ) => {
-    if (!pendingRequest || typeof window === 'undefined') {
-      return;
-    }
-    const nextPayload: PendingRequest = {
-      ...pendingRequest,
-      clarification: {
-        originalIntention: pendingRequest.intention,
-        chosenLabel,
-        chosenDomainId,
-        chosenIntention: nextIntention,
-        createdAt: new Date().toISOString(),
-      },
-    };
-    window.sessionStorage.setItem(PENDING_REQUEST_KEY, JSON.stringify(nextPayload));
-    const now = new Date().toISOString();
-    const draft: RitualRecord = {
-      ritualId: pendingRequest.ritualId,
-      intention: pendingRequest.intention,
-      days: pendingRequest.days,
-      status: 'generating',
-      createdAt: now,
-      updatedAt: now,
-      clarification: nextPayload.clarification,
-    };
-    window.localStorage.setItem(buildRitualStorageKey(ritualId), JSON.stringify(draft));
-    setClarifySuggestions(null);
-    setClarifyReason(null);
-    setCustomClarification('');
-    setRecord(draft);
-    setAdjustGoal(draft.intention);
-    setAdjustDays(String(draft.days));
-  };
-
-  const handleClarificationCustom = () => {
-    if (!pendingRequest) return;
-    const trimmed = customClarification.trim();
-    if (!trimmed) return;
-    const next = `${pendingRequest.intention} → ${trimmed}`;
-    handleClarificationSelect(next, 'Autre (je précise en 1 phrase)', 'personal_productivity');
-  };
-
   if (!record) {
-    if (isCreating && clarifySuggestions && pendingRequest) {
-      return (
-        <section className="creating-shell">
-          <div className="creating-hero">
-            <span className="creating-kicker">{t.ritualKicker}</span>
-            <h1>Ton rituel prend forme</h1>
-            <p>On a compris ton objectif, précise-le en un clic avant la création.</p>
-          </div>
-          <div className="creating-preview-card">
-            <div className="creating-preview-header">Titre proposé</div>
-            <h2 className="creating-preview-title">{formatTitle(pendingRequest.intention)}</h2>
-            <p className="creating-preview-summary">Résumé : {pendingRequest.intention}</p>
-          </div>
-          <div className="clarify-panel">
-            <h2>{getClarifyCopy(clarifyReason).title}</h2>
-            <p>{getClarifyCopy(clarifyReason).body}</p>
-            <div className="clarify-grid">
-              {clarifySuggestions.map((suggestion) => (
-                <button
-                  key={suggestion.id}
-                  type="button"
-                  className="clarify-card"
-                  onClick={() =>
-                    handleClarificationSelect(
-                      suggestion.intention,
-                      suggestion.title,
-                      suggestion.domainHint,
-                    )
-                  }
-                >
-                  <strong>{suggestion.title}</strong>
-                  <span>{suggestion.subtitle}</span>
-                </button>
-              ))}
-            </div>
-            <div className="clarify-other">
-              <label className="input-label" htmlFor="clarify-other-input">
-                {t.clarifyOtherLabel}
-              </label>
-              <input
-                id="clarify-other-input"
-                type="text"
-                value={customClarification}
-                onChange={(event) => setCustomClarification(event.target.value)}
-                placeholder={t.clarifyOtherPlaceholder}
-              />
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={!customClarification.trim()}
-                onClick={handleClarificationCustom}
-              >
-                {t.clarifyOtherCta}
-              </button>
-            </div>
-          </div>
-          {debugTrace ? (
-            <DebugDecisionPanel
-              trace={debugTrace}
-              status={clarifySuggestions ? 'NEEDS_CLARIFICATION' : 'OK'}
-            />
-          ) : null}
-        </section>
-      );
-    }
     if (isCreating) {
       return (
         <section className="creating-shell">
@@ -1230,9 +1057,7 @@ export default function RitualPage() {
           status={
             record.status === 'error' && (record.error === 'blocked' || record.debugMeta?.reason_code)
               ? 'BLOCKED'
-              : clarifySuggestions
-                ? 'NEEDS_CLARIFICATION'
-                : 'OK'
+              : 'OK'
           }
         />
       ) : null}

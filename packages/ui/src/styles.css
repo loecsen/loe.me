@@ -22,6 +22,10 @@
   --loe-color-accent-purple-light: #c7b7ff;
   --loe-color-focus-ring: rgba(198, 176, 255, 0.2);
   --loe-color-white: #ffffff;
+  --loe-color-gradient-body-mid: #e8e8f7;
+  --loe-color-gradient-body-end: #cd82a0;
+  --loe-color-border-panel: #e9edf4;
+  --loe-color-border-panel-alt: #edf0f4;
   --loe-cta-gradient: linear-gradient(90deg, var(--loe-color-cta-gradient-start) 0%, var(--loe-color-cta-gradient-mid) 50%, var(--loe-color-cta-gradient-end) 100%);
   --loe-color-cta-gradient-start: #ac54f1;
   --loe-color-cta-gradient-mid: #ec4799;
@@ -40,6 +44,7 @@
   /* Radius */
   --loe-radius-xs: 6px;
   --loe-radius-sm: 10px;
+  --loe-radius-panel: 12px;
   --loe-radius-md: 16px;
   --loe-radius-lg: 24px;
   --loe-radius-pill: 999px;

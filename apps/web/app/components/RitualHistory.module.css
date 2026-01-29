@@ -1,17 +1,22 @@
-/* Pas de framework CSS : modules CSS uniquement. Breakpoints standards (576, 768, 992px). */
+/* Pas de framework CSS : modules CSS uniquement. Breakpoints : 640px, 1020px, 1600px. */
 
  .historyShell {
    display: grid;
    gap: 16px;
-   width: 100vw;
-   margin-left: calc(50% - 50vw);
+   width: 100%;
+   max-width: 100%;
+   min-width: 0;
+   padding-left: 35px;
+   padding-right: 35px;
    box-sizing: border-box;
  }
 
  .historyBox {
-   width: 95vw;
-   max-width: 95vw;
-   margin: 0 auto;
+   width: 100%;
+   max-width: 100%;
+   margin-left: auto;
+   margin-right: auto;
+   box-sizing: border-box;
    background: #ffffff;
    border: 1px solid #eef1f5;
    border-radius: 10px;
@@ -76,12 +81,12 @@
    color: #5d6370;
  }
  
+ /* 3 colonnes par défaut (1020px – 1600px), fluide */
  .grid {
    display: grid;
    gap: 24px;
-   grid-template-columns: repeat(auto-fill, minmax(260px, 330px));
+   grid-template-columns: repeat(3, minmax(0, 1fr));
    min-width: 0;
-   justify-content: center;
  }
 
  .card {
@@ -92,7 +97,6 @@
    gap: 10px;
    cursor: pointer;
    transition: transform 160ms ease, opacity 160ms ease;
-   max-width: 330px;
    min-width: 0;
    width: 100%;
  }
@@ -112,7 +116,6 @@
    background: #f6f3ff;
    aspect-ratio: 16 / 9;
    display: grid;
-   max-width: 330px;
    min-width: 0;
    width: 100%;
  }
@@ -189,33 +192,28 @@
    font-size: 12px;
  }
  
-/* Breakpoint 992px : 3 colonnes fixes, cartes et images responsive */
- @media (max-width: 992px) {
+/* > 1600px : 4 vignettes */
+ @media (min-width: 1600px) {
    .grid {
-     grid-template-columns: repeat(3, minmax(0, 1fr));
-   }
-
-   .card,
-   .thumb {
-     max-width: none;
+     grid-template-columns: repeat(4, minmax(0, 1fr));
    }
  }
 
-/* Breakpoint 768px : 2 colonnes */
- @media (max-width: 768px) {
+/* < 1020px : 2 colonnes */
+ @media (max-width: 1019px) {
    .grid {
      grid-template-columns: repeat(2, minmax(0, 1fr));
    }
  }
 
-/* Breakpoint 576px : 1 colonne, images pleine largeur */
- @media (max-width: 576px) {
-   .grid {
-     grid-template-columns: 1fr;
+/* < 640px : 1 colonne ; bloc historique 100 % largeur */
+ @media (max-width: 639px) {
+   .historyBox {
+     width: 100%;
+     max-width: 100%;
    }
 
-   .card,
-   .thumb {
-     max-width: none;
+   .grid {
+     grid-template-columns: 1fr;
    }
  }
