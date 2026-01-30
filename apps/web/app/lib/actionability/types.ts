@@ -21,7 +21,8 @@ export type ActionabilityReasonCode =
   | 'borderline_actionable'
   | 'ok'
   | 'actionable'
-  | 'classifier_error';
+  | 'classifier_error'
+  | 'safety_no_suggestion';
 
 export type ActionabilityGateResult = {
   status: ActionabilityStatus;

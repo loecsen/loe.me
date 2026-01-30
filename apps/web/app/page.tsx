@@ -6,7 +6,7 @@ import { Button, Container } from '@loe/ui';
 import { useI18n } from './components/I18nProvider';
 import RitualHistory from './components/RitualHistory';
 import { getMockHomeData } from './PourLaMaquette/getMockHomeData';
-import { runActionabilityV2, toGateResult } from './lib/actionability';
+import { runActionabilityV2, toGateResult, getDisplayLanguage } from './lib/actionability';
 import styles from './page.module.css';
 
 const dayOptions = [7, 14, 30, 60, 90] as const;
@@ -189,13 +189,15 @@ export default function HomePage() {
       }
 
       if (gate.status === 'BORDERLINE') {
+        const displayLang = getDisplayLanguage(trimmed, locale);
         const classifyRes = await fetch('/api/actionability/classify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ intent: trimmed, timeframe_days: finalDays }),
+          body: JSON.stringify({ intent: trimmed, timeframe_days: finalDays, display_lang: displayLang }),
         });
         const classifyData = (await classifyRes.json()) as {
           verdict?: string;
+          reason_code?: string;
           normalized_intent?: string;
           suggested_rephrase?: string | null;
         };
@@ -250,8 +252,14 @@ export default function HomePage() {
           }
         }
         setLastSubmittedIntent(trimmed);
-        setInlineHint((t as { actionabilityNotActionableHint?: string }).actionabilityNotActionableHint ?? null);
-        setSuggestedRephrase(classifyData.suggested_rephrase ?? null);
+        if (classifyData.reason_code === 'safety_no_suggestion') {
+          setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
+          setInlineHintSecondary((t as { safetyInlineFallbackExample?: string }).safetyInlineFallbackExample ?? null);
+          setSuggestedRephrase(null);
+        } else {
+          setInlineHint((t as { actionabilityNotActionableHint?: string }).actionabilityNotActionableHint ?? null);
+          setSuggestedRephrase(classifyData.suggested_rephrase ?? null);
+        }
         setIsSubmitting(false);
         return;
       }
@@ -366,7 +374,7 @@ export default function HomePage() {
                   )}
                   {suggestedRephrase && (
                     <p className={styles.inlineClarifyMessageSecondary}>
-                      {isFrench ? 'Suggestion : ' : 'Suggestion: '}
+                      {(t as { actionabilitySuggestionLabel?: string }).actionabilitySuggestionLabel ?? 'Suggestion: '}
                       <button
                         type="button"
                         className={styles.suggestedRephraseButton}

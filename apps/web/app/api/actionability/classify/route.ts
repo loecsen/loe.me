@@ -4,14 +4,25 @@ import {
   buildActionabilityClassifierUser,
   parseClassifierResponse,
 } from '../../../lib/prompts/actionabilityClassifier';
+import type { DisplayLang } from '../../../lib/actionability';
+import { shouldSuggestRephraseSync, buildSuggestionFromTemplate } from '../../../lib/actionability/suggestion';
+import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const CLASSIFIER_TIMEOUT_MS = 8_000;
 
+const DISPLAY_LANGS: DisplayLang[] = ['en', 'fr', 'es', 'de', 'it', 'zh', 'ja', 'ko', 'ru'];
+function toDisplayLang(v: unknown, uiFallback: string): DisplayLang {
+  const s = typeof v === 'string' ? v.toLowerCase().split('-')[0] : '';
+  if (DISPLAY_LANGS.includes(s as DisplayLang)) return s as DisplayLang;
+  const fromUi = (uiFallback ?? '').toLowerCase().split('-')[0];
+  return DISPLAY_LANGS.includes(fromUi as DisplayLang) ? (fromUi as DisplayLang) : 'en';
+}
+
 export async function POST(request: Request) {
-  let body: { intent?: string; timeframe_days?: number };
+  let body: { intent?: string; timeframe_days?: number; display_lang?: string };
   try {
-    body = (await request.json()) as { intent?: string; timeframe_days?: number };
+    body = (await request.json()) as { intent?: string; timeframe_days?: number; display_lang?: string };
   } catch {
     return NextResponse.json(
       { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'classifier_error', normalized_intent: '', suggested_rephrase: null, confidence: 0 },
@@ -23,12 +34,35 @@ export async function POST(request: Request) {
   const timeframe_days = typeof body.timeframe_days === 'number' && Number.isFinite(body.timeframe_days)
     ? body.timeframe_days
     : undefined;
+  const displayLang = toDisplayLang(body.display_lang ?? '', 'en');
 
   if (!intent) {
     return NextResponse.json(
       { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'too_vague', normalized_intent: '', suggested_rephrase: null, confidence: 0 },
       { status: 400 },
     );
+  }
+
+  if (!shouldSuggestRephraseSync(intent)) {
+    return NextResponse.json({
+      verdict: 'NEEDS_REPHRASE_INLINE',
+      reason_code: 'safety_no_suggestion',
+      normalized_intent: '',
+      suggested_rephrase: null,
+      confidence: 0,
+    });
+  }
+
+  const { guard } = await getLexiconGuard();
+  const safetyVerdict = guard(intent);
+  if (safetyVerdict.status === 'blocked') {
+    return NextResponse.json({
+      verdict: 'NEEDS_REPHRASE_INLINE',
+      reason_code: 'safety_no_suggestion',
+      normalized_intent: '',
+      suggested_rephrase: null,
+      confidence: 0,
+    });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -58,7 +92,7 @@ export async function POST(request: Request) {
         model,
         messages: [
           { role: 'system', content: ACTIONABILITY_CLASSIFIER_SYSTEM },
-          { role: 'user', content: buildActionabilityClassifierUser(intent, timeframe_days) },
+          { role: 'user', content: buildActionabilityClassifierUser(intent, timeframe_days, displayLang) },
         ],
         max_tokens: 256,
         temperature: 0.1,
@@ -104,7 +138,11 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(parsed);
+    const suggested_rephrase = buildSuggestionFromTemplate(displayLang, parsed.normalized_intent);
+    return NextResponse.json({
+      ...parsed,
+      suggested_rephrase: suggested_rephrase ?? parsed.suggested_rephrase,
+    });
   } catch (err) {
     clearTimeout(timeoutId);
     if (process.env.NODE_ENV !== 'production' && err instanceof Error) {

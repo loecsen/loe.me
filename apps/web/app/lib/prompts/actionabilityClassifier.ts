@@ -16,8 +16,8 @@ Rules:
 - ACTIONABLE means a ritual can be generated without follow-up questions because there is at least an action OR a clear goal/outcome.
 - NEEDS_REPHRASE_INLINE means purely social, not a ritual request, or too vague.
 - Multilingual: short CJK/Korean can still be actionable (e.g., "피자 만들기", "学习中文A2").
-- suggested_rephrase must be same language as intent, <= 12 words, include action + outcome when possible.
-- normalized_intent: light cleanup, no translation.
+- normalized_intent: light cleanup, same language as intent, no translation. We will build the suggestion from it.
+- suggested_rephrase: ignored (we build it from normalized_intent and display_lang). You may set null.
 Heuristics:
 - Pure greetings/chitchat → NEEDS_REPHRASE_INLINE.
 - Single noun/topic without action/outcome → NEEDS_REPHRASE_INLINE.
@@ -25,9 +25,19 @@ Heuristics:
 - Consume/enjoy only ("eat pizza") without learning/skill/outcome → prefer NEEDS_REPHRASE_INLINE.
 - If timeframe_days present and intent is a skill/learning goal → prefer ACTIONABLE.`;
 
-export function buildActionabilityClassifierUser(intent: string, timeframe_days?: number): string {
-  return `Intent: "${intent.replace(/"/g, '\\"')}"
-timeframe_days: ${timeframe_days ?? 'null'}`;
+export function buildActionabilityClassifierUser(
+  intent: string,
+  timeframe_days?: number,
+  display_lang?: string,
+): string {
+  const parts = [
+    `Intent: "${intent.replace(/"/g, '\\"')}"`,
+    `timeframe_days: ${timeframe_days ?? 'null'}`,
+  ];
+  if (display_lang) {
+    parts.push(`display_lang: ${display_lang} (use this for output language consistency)`);
+  }
+  return parts.join('\n');
 }
 
 export type ClassifierVerdict = 'ACTIONABLE' | 'NEEDS_REPHRASE_INLINE';

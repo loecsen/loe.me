@@ -66,9 +66,23 @@ const LATIN_RANGES = [
 ];
 const CYRILLIC_RANGE = [0x0400, 0x04ff];
 const ARABIC_RANGE = [0x0600, 0x06ff];
+const HIRAGANA_RANGE: [number, number] = [0x3040, 0x309f];
+const KATAKANA_RANGE: [number, number] = [0x30a0, 0x30ff];
+const CJK_IDEOGRAPH_RANGES: Array<[number, number]> = [
+  [0x4e00, 0x9fff],
+  [0x3400, 0x4dbf],
+];
 
 function inRange(code: number, [lo, hi]: [number, number]) {
   return code >= lo && code <= hi;
+}
+
+function isKana(code: number): boolean {
+  return inRange(code, HIRAGANA_RANGE) || inRange(code, KATAKANA_RANGE);
+}
+
+function isCJKIdeograph(code: number): boolean {
+  return CJK_IDEOGRAPH_RANGES.some((r) => inRange(code, r));
 }
 
 function isCJK(code: number): boolean {
@@ -95,6 +109,46 @@ function isArabic(code: number): boolean {
 /** Trim + collapse spaces */
 export function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Display language for inline messages/suggestions: script-based heuristics + UI fallback. */
+export type DisplayLang = 'en' | 'fr' | 'es' | 'de' | 'it' | 'zh' | 'ja' | 'ko' | 'ru';
+
+const DISPLAY_LANG_FALLBACKS: Record<string, DisplayLang> = {
+  en: 'en',
+  fr: 'fr',
+  es: 'es',
+  de: 'de',
+  it: 'it',
+  zh: 'zh',
+  ja: 'ja',
+  ko: 'ko',
+  ru: 'ru',
+};
+
+export function getDisplayLanguage(intent: string, uiLocale: string): DisplayLang {
+  const trimmed = (intent ?? '').trim();
+  if (!trimmed) {
+    const base = (uiLocale ?? '').split('-')[0]?.toLowerCase() ?? 'en';
+    return (DISPLAY_LANG_FALLBACKS[base] as DisplayLang) ?? 'en';
+  }
+  let hangul = 0;
+  let kana = 0;
+  let cjk = 0;
+  let cyrillic = 0;
+  for (const char of trimmed) {
+    const code = char.codePointAt(0) ?? 0;
+    if (isHangul(code)) hangul++;
+    else if (isKana(code)) kana++;
+    else if (isCJKIdeograph(code)) cjk++;
+    else if (isCyrillic(code)) cyrillic++;
+  }
+  if (hangul > 0) return 'ko';
+  if (kana > 0) return 'ja';
+  if (cjk > 0) return 'zh';
+  if (cyrillic > 0) return 'ru';
+  const base = (uiLocale ?? '').split('-')[0]?.toLowerCase() ?? 'en';
+  return (DISPLAY_LANG_FALLBACKS[base] as DisplayLang) ?? 'en';
 }
 
 /** Letters only: remove spaces, punctuation, emojis (keep letters and numbers for checks) */

@@ -98,8 +98,10 @@ export const translations = {
     inlineClarifyHintSingleTerm: 'Can you specify what you want to do, and in what context?',
     actionabilityNotActionableHint:
       "It will be difficult to create a ritual with this request. Can you rephrase with an action (do / learn / improve)?",
+    actionabilitySuggestionLabel: 'Suggestion: ',
     lastSubmittedLabel: 'Last request:',
     safetyInlineMessage: "We can't generate a ritual from this request.",
+    safetyInlineFallbackExample: "Try instead: 'improve my sleep routine in 14 days'",
     safetyInlineSecondary:
       'You can try for example a mindfulness, breathing or recentering ritual.',
     homeMissionLabel: 'Mission',
@@ -254,8 +256,10 @@ export const translations = {
     inlineClarifyHintSingleTerm: 'Peux-tu préciser ce que tu veux faire, et dans quel contexte ?',
     actionabilityNotActionableHint:
       "Il va être difficile de créer un rituel avec cette demande. Peux-tu reformuler avec une action (faire / apprendre / améliorer) ?",
+    actionabilitySuggestionLabel: 'Suggestion : ',
     lastSubmittedLabel: 'Dernière demande :',
     safetyInlineMessage: "Nous ne pouvons pas générer de rituel à partir de cette demande.",
+    safetyInlineFallbackExample: "Essaie plutôt : 'améliorer ma routine de sommeil en 14 jours'",
     safetyInlineSecondary:
       "Tu peux par exemple essayer un rituel de pleine conscience, de respiration ou de recentrage.",
     homeHistoryTitle: 'Historique local',
@@ -401,8 +405,10 @@ export const translations = {
     inlineClarifyHintSingleTerm: '¿Puedes precisar qué quieres hacer y en qué contexto?',
     actionabilityNotActionableHint:
       'Será difícil crear un ritual con esta petición. ¿Puedes reformular con una acción (hacer / aprender / mejorar)?',
+    actionabilitySuggestionLabel: 'Sugerencia: ',
     lastSubmittedLabel: 'Última petición:',
     safetyInlineMessage: 'No podemos generar un ritual a partir de esta petición.',
+    safetyInlineFallbackExample: "Prueba mejor: 'mejorar mi rutina de sueño en 14 días'",
     safetyInlineSecondary:
       'Puedes probar por ejemplo un ritual de mindfulness, respiración o recentrado.',
     safetyChoiceOrganize: 'Organizarme mejor en 10 minutos al día',
@@ -573,8 +579,10 @@ export const translations = {
     inlineClarifyHintSingleTerm: 'Kannst du präzisieren, was du tun möchtest und in welchem Kontext?',
     actionabilityNotActionableHint:
       'Es wird schwierig sein, mit dieser Anfrage ein Ritual zu erstellen. Kannst du mit einer Aktion umformulieren (tun / lernen / verbessern)?',
+    actionabilitySuggestionLabel: 'Vorschlag: ',
     lastSubmittedLabel: 'Letzte Anfrage:',
     safetyInlineMessage: 'Wir können aus dieser Anfrage kein Ritual erstellen.',
+    safetyInlineFallbackExample: "Probiere stattdessen: 'meine Schlafroutine in 14 Tagen verbessern'",
     safetyInlineSecondary:
       'Du kannst zum Beispiel ein Achtsamkeits-, Atem- oder Zentrierungsritual ausprobieren.',
     safetyChoiceOrganize: 'Besser organisieren in 10 Minuten pro Tag',
@@ -746,8 +754,10 @@ export const translations = {
     inlineClarifyHintSingleTerm: 'Puoi precisare cosa vuoi fare e in quale contesto?',
     actionabilityNotActionableHint:
       'Sarà difficile creare un rituale con questa richiesta. Puoi riformulare con un\'azione (fare / imparare / migliorare)?',
+    actionabilitySuggestionLabel: 'Suggerimento: ',
     lastSubmittedLabel: 'Ultima richiesta:',
     safetyInlineMessage: 'Non possiamo generare un rituale da questa richiesta.',
+    safetyInlineFallbackExample: "Prova invece: 'migliorare la mia routine del sonno in 14 giorni'",
     safetyInlineSecondary:
       'Puoi ad esempio provare un rituale di mindfulness, respirazione o recentramento.',
     safetyChoiceOrganize: 'Organizzarmi meglio in 10 minuti al giorno',
