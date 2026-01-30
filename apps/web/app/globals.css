@@ -179,6 +179,8 @@ a {
 .app-main {
   flex: 1;
   padding: var(--loe-space-xxl) 0 calc(var(--loe-space-huge) + 120px);
+  color: rgba(102, 102, 102, 1);
+  border-image: none;
 }
 
 .app-main-home {
@@ -342,14 +344,21 @@ a {
   text-transform: uppercase;
 }
 
-.debug-pill-ok {
+.debug-pill-ok,
+.debug-pill-actionable {
   background: rgba(80, 200, 120, 0.2);
   color: #86f0a6;
 }
 
-.debug-pill-needs_clarification {
+.debug-pill-not-actionable-inline,
+.debug-pill-needs-clarification {
   background: rgba(255, 204, 102, 0.2);
   color: #ffd28c;
+}
+
+.debug-pill-borderline {
+  background: rgba(255, 180, 80, 0.2);
+  color: #ffc070;
 }
 
 .debug-pill-blocked {

@@ -14,6 +14,9 @@ import {
 
 type RitualTab = 'in_progress' | 'mine' | 'community';
 
+/** Données par onglet (passées par la Home quand source = mock). */
+export type RitualTabData = Record<RitualTab, RitualCardItem[]>;
+
 type ListResponse = {
   items: RitualCardItem[];
   nextCursor: string | null;
@@ -27,10 +30,15 @@ const LOAD_MORE_LIMIT = 6;
 const tabLabels: Record<RitualTab, string> = {
   in_progress: 'Rituels en cours',
   mine: 'Mes projets',
-  community: 'Communauté',
+  community: 'Inspiration',
 };
 
-export default function RitualHistory() {
+type RitualHistoryProps = {
+  /** Données maquette par onglet ; si fourni, on les affiche sans appeler l’API */
+  mockTabData?: RitualTabData | null;
+};
+
+export default function RitualHistory({ mockTabData = null }: RitualHistoryProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<RitualTab>('in_progress');
   const [expanded, setExpanded] = useState(false);
@@ -38,6 +46,8 @@ export default function RitualHistory() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  /** En mode mock : IDs des cartes retirées (mockTabData est lecture seule) */
+  const [removedMockIds, setRemovedMockIds] = useState<Set<string>>(() => new Set());
 
   const fetchPage = useCallback(
     async ({
@@ -65,7 +75,9 @@ export default function RitualHistory() {
           throw new Error('list_failed');
         }
         const payload = (await response.json()) as ListResponse;
-        setItems((prev) => (reset ? payload.items : [...prev, ...payload.items]));
+        setItems((prev) =>
+          reset ? payload.items ?? [] : [...prev, ...(payload.items ?? [])],
+        );
         setNextCursor(payload.nextCursor ?? null);
         if (typeof payload.total === 'number') {
           setTotal(payload.total);
@@ -84,22 +96,36 @@ export default function RitualHistory() {
   );
 
   const loadInitial = useCallback(() => {
+    if (mockTabData != null) {
+      const list = mockTabData[activeTab] ?? [];
+      setItems(list);
+      setTotal(list.length);
+      setNextCursor(null);
+      setLoading(false);
+      return;
+    }
     const limit = expanded ? EXPANDED_LIMIT : COLLAPSED_LIMIT;
     fetchPage({ tab: activeTab, limit, cursor: null, reset: true });
-  }, [activeTab, expanded, fetchPage]);
+  }, [mockTabData, activeTab, expanded, fetchPage]);
 
   useEffect(() => {
     loadInitial();
   }, [loadInitial]);
 
+  /** En mode mock : afficher directement mockTabData (filtré par removedMockIds) pour éviter un rendu sans imageUrl */
+  const displayItems =
+    mockTabData != null
+      ? (mockTabData[activeTab] ?? []).filter((item) => !removedMockIds.has(item.id))
+      : items;
+
   const showViewAll =
-    !expanded && ((total ?? 0) > COLLAPSED_LIMIT || (items.length >= COLLAPSED_LIMIT && !!nextCursor));
+    !expanded && ((total ?? 0) > COLLAPSED_LIMIT || (displayItems.length >= COLLAPSED_LIMIT && !!nextCursor));
 
   const hasMore = expanded && !!nextCursor;
 
   const emptyCopy = useMemo(() => {
     if (activeTab === 'community') {
-      return 'La communauté arrive bientôt.';
+      return "L'inspiration arrive bientôt.";
     }
     if (activeTab === 'mine') {
       return 'Aucun projet pour le moment.';
@@ -153,6 +179,12 @@ export default function RitualHistory() {
   };
 
   const handleRemove = async (ritualId: string) => {
+    const isMock = ritualId.startsWith('mock-');
+    if (isMock) {
+      setRemovedMockIds((prev) => new Set(prev).add(ritualId));
+      setTotal((prev) => (typeof prev === 'number' && prev > 0 ? prev - 1 : prev));
+      return;
+    }
     try {
       await fetch('/api/rituals/remove', {
         method: 'POST',
@@ -205,17 +237,17 @@ export default function RitualHistory() {
           )}
         </div>
 
-        {items.length === 0 && !loading ? (
+        {displayItems.length === 0 && !loading ? (
           <div className={styles.emptyState}>{emptyCopy}</div>
         ) : (
           <div className={styles.grid}>
-            {items.map((item) => (
+            {displayItems.map((item) => (
               <RitualCard key={item.id} item={item} onOpen={openRitualInMission} onRemove={handleRemove} />
             ))}
           </div>
         )}
 
-        {loading && items.length > 0 && <div className={styles.loadingNote}>Chargement…</div>}
+        {loading && displayItems.length > 0 && <div className={styles.loadingNote}>Chargement…</div>}
 
         {hasMore && !loading && (
           <Button

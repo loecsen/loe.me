@@ -157,14 +157,13 @@ export async function POST(request: Request) {
         intentionExcerpt: rawIntention.slice(0, 120),
       });
     }
-    return NextResponse.json(
-      {
-        blocked: true,
-        reason_code: safetyVerdict.reason_code,
-        ...(debugEnabled ? { debugTrace: trace } : {}),
-      },
-      { status: 400 },
-    );
+    return NextResponse.json({
+      blocked: true,
+      block_reason: safetyVerdict.reason_code,
+      clarification: { mode: 'inline', type: 'safety' },
+      debug: { safety: { reason_code: safetyVerdict.reason_code } },
+      ...(debugEnabled ? { debugTrace: trace } : {}),
+    });
   }
 
   const gate = runSafetyGate(rawIntention, resolvedLocale);

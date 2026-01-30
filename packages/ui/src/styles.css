@@ -30,6 +30,13 @@
   --loe-color-cta-gradient-start: #ac54f1;
   --loe-color-cta-gradient-mid: #ec4799;
   --loe-color-cta-gradient-end: #9934e5;
+  --loe-color-level-pill-bg: #b45309;
+  --loe-color-level-pill-text: #ffffff;
+  --loe-color-progress-fill: #7b56ff;
+  --loe-color-progress-track: #e5e7eb;
+  --loe-color-star: #f4c95d;
+  --loe-color-tooltip-bg: #f9fafb;
+  --loe-color-tooltip-border: #eef1f5;
 
   /* Spacing */
   --loe-space-xxs: 4px;

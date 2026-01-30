@@ -1,0 +1,57 @@
+---
+description: Validation rules for Loe.me — when to run dev, lint, build
+alwaysApply: true
+---
+
+# Validation pour Loe.me
+
+## Objectif
+
+Ne pas bloquer le travail avec des `npm run build` inutiles. Utiliser le bon niveau de vérification selon le type de changements.
+
+---
+
+## 1) Par défaut (suffisant)
+
+Pour les changements sur : **UI, routing, heuristiques, logique métier, actionability, clarification, Home, Mission, Ritual pages**.
+
+Tu dois **uniquement** exécuter et valider avec :
+
+- `npm -w apps/web run dev`
+- `npm -w apps/web run lint`
+
+Ces deux commandes sont **SUFFISANTES** pour valider le changement.
+
+Tu **NE dois PAS** exiger `npm run build` dans ces cas, même si le build échoue dans l’environnement (fonts.googleapis.com, réseau, etc.).
+
+---
+
+## 2) Quand exiger le build
+
+`npm -w apps/web run build` est requis **UNIQUEMENT** si les changements touchent :
+
+- `packages/core`
+- `packages/ui`
+- le bundling, la config Next.js ou le tooling (webpack, tsconfig, next.config, package.json workspaces)
+- les tokens CSS ou les exports de packages
+
+---
+
+## 3) Rapports d’erreur
+
+Quand tu mentionnes une erreur de build liée au réseau (Google Fonts, DNS, etc.), tu dois **explicitement** indiquer :
+
+> **Build failure is environmental (network) and not related to the code change.**
+
+---
+
+## 4) PR / commits
+
+Indique toujours en fin de message ou dans la description :
+
+- **"Validated by: dev + lint"** (changement par défaut), ou
+- **"Validated by: dev + lint + build (packages changed)"** (si packages/config modifiés)
+
+---
+
+À suivre strictement pour tous les changements sur Loe.me.

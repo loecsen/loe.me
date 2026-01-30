@@ -2,12 +2,12 @@
 
  .historyShell {
    display: grid;
-   gap: 16px;
+   gap: var(--loe-space-md);
    width: 100%;
    max-width: 100%;
    min-width: 0;
-   padding-left: 35px;
-   padding-right: 35px;
+   padding-left: var(--loe-space-xl);
+   padding-right: var(--loe-space-xl);
    box-sizing: border-box;
  }
 
@@ -17,13 +17,13 @@
    margin-left: auto;
    margin-right: auto;
    box-sizing: border-box;
-   background: #ffffff;
-   border: 1px solid #eef1f5;
-   border-radius: 10px;
-   padding: 20px 24px;
+   background: var(--loe-color-background);
+   border: 1px solid var(--loe-color-border-light);
+   border-radius: var(--loe-radius-sm);
+   padding: var(--loe-space-lg) var(--loe-space-lg);
    display: grid;
-   gap: 20px;
-   box-shadow: 0 12px 24px rgba(31, 41, 55, 0.05);
+   gap: var(--loe-space-lg);
+   box-shadow: var(--loe-shadow-card);
    min-width: 0;
    box-sizing: border-box;
  }
@@ -32,173 +32,46 @@
    display: flex;
    align-items: center;
    justify-content: space-between;
-   gap: 16px;
+   gap: var(--loe-space-md);
  }
- 
- .tabs {
-   display: inline-flex;
-   align-items: center;
-   gap: 6px;
-   padding: 4px;
-   border-radius: 999px;
-   background: #f5f6f9;
-   border: 1px solid #edf0f5;
- }
- 
- .tabButton {
-   border: none;
-   background: transparent;
-   padding: 6px 14px;
-   border-radius: 999px;
-   font-size: 13px;
-   color: #7b8190;
-   font-weight: 500;
-   cursor: pointer;
-   transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease;
- }
- 
- .tabButton:hover {
-   color: #5d6370;
- }
- 
- .tabActive {
-   background: #ffffff;
-   color: #1d2430;
-   box-shadow: 0 8px 18px rgba(31, 41, 55, 0.1);
- }
- 
- .viewAll {
-   border: none;
-   background: none;
-   color: #7b8190;
-   font-size: 13px;
-   font-weight: 500;
-   cursor: pointer;
-   padding: 0;
- }
- 
- .viewAll:hover {
-   color: #5d6370;
- }
- 
- /* 3 colonnes par défaut (1020px – 1600px), fluide */
+
+ /* 3 colonnes desktop, 2 tablette, 1 mobile — design tokens */
  .grid {
    display: grid;
-   gap: 24px;
+   gap: var(--loe-space-lg);
    grid-template-columns: repeat(3, minmax(0, 1fr));
    min-width: 0;
  }
 
- .card {
-   background: transparent;
-   border: none;
-   padding: 0;
-   display: grid;
-   gap: 10px;
-   cursor: pointer;
-   transition: transform 160ms ease, opacity 160ms ease;
-   min-width: 0;
-   width: 100%;
- }
-
- .card:hover {
-   transform: translateY(-1px);
- }
-
- .card:focus-visible {
-   outline: 2px solid #c7b7ff;
-   outline-offset: 3px;
- }
-
- .thumb {
-   border-radius: 10px;
-   overflow: hidden;
-   background: #f6f3ff;
-   aspect-ratio: 16 / 9;
-   display: grid;
-   min-width: 0;
-   width: 100%;
- }
-
- .thumbImage {
-   width: 100%;
-   height: 100%;
-   max-width: 100%;
-   object-fit: cover;
-   border-radius: 10px;
-   overflow: hidden;
- }
- 
- .cardBody {
-   display: grid;
-   gap: 6px;
- }
- 
- .title {
-   font-weight: 600;
-   font-size: 14px;
-   color: #1d2430;
-   overflow: hidden;
-   text-overflow: ellipsis;
-   white-space: nowrap;
- }
-
- .meta {
-   color: #9aa2ac;
-   font-size: 12px;
- }
-
- .remove {
-   border: none;
-   background: none;
-   color: #9aa2ac;
-   font-size: 12px;
-   font-weight: 500;
-   cursor: pointer;
-   padding: 0;
-   text-align: left;
- }
-
- .remove:hover {
-   color: #6f7681;
- }
- 
  .emptyState {
-   border-radius: 10px;
-   border: 1px dashed #e3e7ee;
-   padding: 18px;
-   color: #8a9099;
-   background: #fafbfc;
+   border-radius: var(--loe-radius-sm);
+   border: 1px dashed var(--loe-color-border);
+   padding: var(--loe-space-lg);
+   color: var(--loe-color-muted-light);
+   background: var(--loe-color-surface);
  }
  
  .loadMore {
    border: none;
-   background: #f5f6f9;
-   color: #5d6370;
-   font-size: 13px;
-   padding: 8px 14px;
-   border-radius: 999px;
+   background: var(--loe-color-surface-muted);
+   color: var(--loe-color-muted-lighter);
+   font-size: var(--loe-font-size-xs);
+   padding: var(--loe-space-xs) var(--loe-space-sm);
+   border-radius: var(--loe-radius-pill);
    cursor: pointer;
    justify-self: center;
  }
  
  .loadMore:hover {
-   background: #eceff4;
+   background: var(--loe-color-border-lighter);
  }
  
  .loadingNote {
    text-align: center;
-   color: #9aa2ac;
-   font-size: 12px;
+   color: var(--loe-color-muted-light);
+   font-size: var(--loe-font-size-xs);
  }
  
-/* > 1600px : 4 vignettes */
- @media (min-width: 1600px) {
-   .grid {
-     grid-template-columns: repeat(4, minmax(0, 1fr));
-   }
- }
-
 /* < 1020px : 2 colonnes */
  @media (max-width: 1019px) {
    .grid {

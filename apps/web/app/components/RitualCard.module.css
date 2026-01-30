@@ -1,0 +1,210 @@
+/* Ritual card — design tokens only, flutter-friendly */
+.card {
+  background: var(--loe-color-background);
+  border: 1px solid var(--loe-color-border-light);
+  border-radius: var(--loe-radius-sm);
+  padding: 0;
+  display: grid;
+  gap: 0;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  min-width: 0;
+  width: 100%;
+  box-shadow: var(--loe-shadow-card);
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--loe-shadow-card-hover);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--loe-color-accent-purple-light);
+  outline-offset: 2px;
+}
+
+.thumb {
+  position: relative;
+  border-radius: var(--loe-radius-sm) var(--loe-radius-sm) 0 0;
+  overflow: hidden;
+  background: var(--loe-color-surface-muted);
+  aspect-ratio: 16 / 9;
+  min-width: 0;
+  width: 100%;
+}
+
+.thumbImage {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+.levelPill {
+  position: absolute;
+  top: var(--loe-space-xs);
+  left: var(--loe-space-xs);
+  padding: 4px var(--loe-space-sm);
+  border-radius: var(--loe-radius-pill);
+  background: var(--loe-color-background);
+  color: var(--loe-color-text);
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-semibold);
+  line-height: 1.2;
+  white-space: nowrap;
+  border: 1px solid var(--loe-color-border);
+}
+
+.cardBody {
+  padding: var(--loe-space-xs) var(--loe-space-md);
+  display: grid;
+  gap: var(--loe-space-xxs);
+}
+
+.title {
+  font-weight: var(--loe-font-weight-semibold);
+  font-size: var(--loe-font-size-sm);
+  color: var(--loe-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: var(--loe-line-height-tight);
+}
+
+.progressRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--loe-space-xxs);
+  width: 100%;
+  min-width: 0;
+}
+
+.progressPct {
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-medium);
+  color: var(--loe-color-accent-purple);
+  align-self: flex-end;
+  line-height: 1.2;
+}
+
+.progressBar {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--loe-radius-pill);
+  background: var(--loe-color-progress-track);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: var(--loe-radius-pill);
+  background: linear-gradient(90deg, #ec4899, var(--loe-color-accent-purple-light));
+  transition: width 180ms ease;
+}
+
+.stepLabel {
+  font-size: var(--loe-font-size-xs);
+  color: var(--loe-color-muted-light);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.friendsRatingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--loe-space-sm);
+  min-width: 0;
+}
+
+.friendsBlock {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.ratingBlock {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.starsRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.star {
+  color: var(--loe-color-star);
+}
+
+.starIcon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.starEmpty {
+  color: var(--loe-color-progress-track);
+}
+
+.ratingScore {
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-medium);
+  color: var(--loe-color-text-secondary);
+}
+
+.ratingCount {
+  font-size: var(--loe-font-size-xs);
+  color: var(--loe-color-muted-light);
+}
+
+.viewedRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--loe-font-size-xs);
+  color: var(--loe-color-muted-light);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.clockIcon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.remove {
+  position: absolute;
+  top: var(--loe-space-xs);
+  right: var(--loe-space-xs);
+  border: none;
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--loe-color-white);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--loe-radius-xs);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  opacity: 0.8;
+  transition: opacity 150ms ease;
+}
+
+.remove:hover {
+  opacity: 1;
+}
+
+.remove:focus-visible {
+  outline: 2px solid var(--loe-color-white);
+  outline-offset: 2px;
+}

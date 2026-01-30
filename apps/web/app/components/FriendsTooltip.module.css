@@ -1,0 +1,106 @@
+/* Tooltip above avatars — design tokens only */
+.tooltip {
+  min-width: 220px;
+  max-width: 280px;
+  padding: var(--loe-space-sm) var(--loe-space-md);
+  background: var(--loe-color-tooltip-bg);
+  border: 1px solid var(--loe-color-tooltip-border);
+  border-radius: var(--loe-radius-sm);
+  box-shadow: var(--loe-shadow-md);
+  z-index: 10;
+}
+
+.tooltipPositionSelf {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: var(--loe-space-xs);
+  pointer-events: none;
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 24px;
+  border: 6px solid transparent;
+  border-top-color: var(--loe-color-tooltip-border);
+  margin-left: -6px;
+}
+
+.tooltipInSlot {
+  position: relative;
+  pointer-events: auto;
+}
+
+.tooltipHeader {
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-semibold);
+  color: var(--loe-color-text-secondary);
+  margin: 0 0 var(--loe-space-xs) 0;
+}
+
+.friendList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--loe-space-xs);
+}
+
+.friendRow {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: var(--loe-space-xs);
+}
+
+.friendAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--loe-color-surface-muted);
+}
+
+.friendInfo {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.friendName {
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-medium);
+  color: var(--loe-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friendProgressBar {
+  height: 4px;
+  border-radius: var(--loe-radius-pill);
+  background: var(--loe-color-progress-track);
+  overflow: hidden;
+}
+
+.friendProgressFill {
+  height: 100%;
+  border-radius: var(--loe-radius-pill);
+  background: linear-gradient(90deg, var(--loe-color-accent-purple), var(--loe-color-accent-purple-light));
+  transition: width 120ms ease;
+}
+
+.friendStep {
+  font-size: 10px;
+  color: var(--loe-color-muted-light);
+  text-align: right;
+}
+
+.moreLabel {
+  font-size: var(--loe-font-size-xs);
+  color: var(--loe-color-muted-light);
+  margin-top: var(--loe-space-xxs);
+  padding-left: 32px;
+}

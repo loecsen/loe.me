@@ -5,8 +5,12 @@ import type { TraceEvent } from '@loe/core';
 
 type DebugDecisionPanelProps = {
   trace: TraceEvent[];
-  status: 'OK' | 'NEEDS_CLARIFICATION' | 'BLOCKED';
+  status: 'OK' | 'ACTIONABLE' | 'NOT_ACTIONABLE_INLINE' | 'BORDERLINE' | 'BLOCKED';
 };
+
+function statusSlug(s: string): string {
+  return s.toLowerCase().replace(/_/g, '-');
+}
 
 export default function DebugDecisionPanel({ trace, status }: DebugDecisionPanelProps) {
   const [expanded, setExpanded] = useState(false);
@@ -15,7 +19,7 @@ export default function DebugDecisionPanel({ trace, status }: DebugDecisionPanel
     <div className="debug-panel">
       <div className="debug-panel-header">
         <strong>Debug</strong>
-        <span className={`debug-pill debug-pill-${status.toLowerCase()}`}>{status}</span>
+        <span className={`debug-pill debug-pill-${statusSlug(status)}`}>{status}</span>
         <button type="button" onClick={() => setExpanded((prev) => !prev)}>
           {expanded ? 'Hide details' : 'Show details'}
         </button>

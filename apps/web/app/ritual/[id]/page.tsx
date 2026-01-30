@@ -256,6 +256,14 @@ export default function RitualPage() {
   }, [steps]);
 
   useEffect(() => {
+    if (record?.status === 'error' && (record.error === 'blocked' || record.debugMeta?.reason_code)) {
+      router.replace(
+        `/?safetyBlock=1&intention=${encodeURIComponent(record.intention)}`,
+      );
+    }
+  }, [record?.status, record?.error, record?.debugMeta?.reason_code, record?.intention, router]);
+
+  useEffect(() => {
     const ready = record?.status === 'ready';
     if (!ready) {
       setRevealStage(0);
@@ -397,8 +405,25 @@ export default function RitualPage() {
           setDebugTrace(payloadDebugTrace);
         }
 
+        const blockedPayload = payload as {
+          blocked?: boolean;
+          clarification?: { mode?: string; type?: string };
+          reason_code?: string;
+          error?: string;
+        };
+        if (blockedPayload?.blocked && blockedPayload?.clarification?.mode === 'inline' && blockedPayload?.clarification?.type === 'safety') {
+          try {
+            window.localStorage.removeItem(buildRitualStorageKey(ritualId));
+          } catch {
+            // ignore
+          }
+          router.replace(
+            `/?safetyBlock=1&intention=${encodeURIComponent(record.intention)}`,
+          );
+          return;
+        }
+
         if (!response.ok) {
-          const blockedPayload = payload as { blocked?: boolean; reason_code?: string; error?: string };
           const errorMessage = blockedPayload.blocked
             ? 'blocked'
             : blockedPayload.error ?? 'generation_failed';

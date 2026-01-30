@@ -73,8 +73,49 @@ walk(uiRoot, '.css', (file) => {
   }
 });
 
+// Anti-fuite mock : seul apps/web/app/page.tsx peut importer PourLaMaquette
+const appRoot = path.join(__dirname, '..', 'apps', 'web', 'app');
+const mockDir = path.join(appRoot, 'PourLaMaquette');
+const allowedMockImporter = path.join(appRoot, 'page.tsx');
+
+function walkAll(dir, ext, fn) {
+  if (!fs.existsSync(dir)) return;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) walkAll(full, ext, fn);
+    else if (e.name.endsWith(ext)) fn(full);
+  }
+}
+
+function isAllowedMockImporter(file) {
+  return path.normalize(file) === path.normalize(allowedMockImporter);
+}
+
+function hasMockImport(content) {
+  return /from\s+['"].*PourLaMaquette|import\s+.*PourLaMaquette/.test(content);
+}
+
+walkAll(appRoot, '.tsx', (file) => {
+  if (file.startsWith(mockDir + path.sep)) return; // fichiers dans PourLaMaquette exclus
+  const content = fs.readFileSync(file, 'utf-8');
+  if (hasMockImport(content) && !isAllowedMockImporter(file)) {
+    const relative = path.relative(path.join(__dirname, '..'), file);
+    errors.push(`Mock leak detected: ${relative} imports PourLaMaquette. Only Home provider may import mocks.`);
+  }
+});
+
+walkAll(appRoot, '.ts', (file) => {
+  if (file.startsWith(mockDir + path.sep)) return;
+  const content = fs.readFileSync(file, 'utf-8');
+  if (hasMockImport(content) && !isAllowedMockImporter(file)) {
+    const relative = path.relative(path.join(__dirname, '..'), file);
+    errors.push(`Mock leak detected: ${relative} imports PourLaMaquette. Only Home provider may import mocks.`);
+  }
+});
+
 if (errors.length > 0) {
-  console.error('Règles UI (docs/ui-blueprint.md) non respectées:\n');
+  console.error('Règles UI (docs/ui-blueprint.md) + anti-leak mock non respectées:\n');
   errors.forEach((e) => console.error(e));
   process.exit(1);
 }

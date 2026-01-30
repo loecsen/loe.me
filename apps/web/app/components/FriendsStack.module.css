@@ -1,0 +1,101 @@
+/* Avatars + group count — design tokens only */
+.wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--loe-space-xs);
+  min-width: 0;
+}
+
+.tooltipSlot {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: var(--loe-space-xs);
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.avatars {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--loe-color-surface-muted);
+  border: 2px solid var(--loe-color-background);
+  margin-left: -8px;
+  flex-shrink: 0;
+}
+
+.avatar:first-of-type {
+  margin-left: 0;
+}
+
+.avatarPlaceholder {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--loe-color-surface-muted);
+  border: 2px solid var(--loe-color-background);
+  margin-left: -8px;
+  flex-shrink: 0;
+}
+
+.avatarPlaceholder:first-of-type {
+  margin-left: 0;
+}
+
+.moreBadge {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin-left: -8px;
+  background: var(--loe-color-surface-muted);
+  border: 2px solid var(--loe-color-background);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: var(--loe-font-weight-semibold);
+  color: var(--loe-color-muted-light);
+  flex-shrink: 0;
+}
+
+.groupCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--loe-font-size-xs);
+  color: var(--loe-color-muted-light);
+  white-space: nowrap;
+}
+
+.groupIcon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.8;
+}
+
+.anchor {
+  cursor: pointer;
+  outline: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--loe-space-xs);
+  min-width: 0;
+}
+
+.anchor:focus-visible {
+  border-radius: var(--loe-radius-pill);
+  box-shadow: var(--loe-shadow-focus);
+}

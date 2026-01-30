@@ -10,8 +10,8 @@ export const translations = {
     navDemo: 'Demo',
     floatingStart: 'Start',
     floatingStartAria: 'Start the next mission',
-    homeTagline: 'Give wings to your projects.',
-    homeHeroTitle: 'Create AI-powered living micro-learnings that evolve thanks to the community.',
+    homeTagline: 'What is your next challenge?',
+    homeHeroTitle: 'Create daily missions, to do alone or with others.',
     homeIntentionLabel: 'Describe your intention in a few words',
     homeAddDocs: '+ Add documents',
     homeGuided: 'Guided',
@@ -96,7 +96,12 @@ export const translations = {
     inlineClarifyHint:
       "It will be difficult to create a ritual with this request. Can you specify your goal (action + outcome)?",
     inlineClarifyHintSingleTerm: 'Can you specify what you want to do, and in what context?',
+    actionabilityNotActionableHint:
+      "It will be difficult to create a ritual with this request. Can you rephrase with an action (do / learn / improve)?",
     lastSubmittedLabel: 'Last request:',
+    safetyInlineMessage: "We can't generate a ritual from this request.",
+    safetyInlineSecondary:
+      'You can try for example a mindfulness, breathing or recentering ritual.',
     homeMissionLabel: 'Mission',
     homeMissionFallback: 'Learning step',
     rhythmDaily: 'daily',
@@ -177,9 +182,9 @@ export const translations = {
     navDemo: 'Demo',
     floatingStart: 'Commencer',
     floatingStartAria: 'Commencer la prochaine mission',
-    homeTagline: 'Donnez des ailes à vos projets.',
+    homeTagline: 'Quel est votre prochain défi ?',
     homeHeroTitle:
-      'Créez avec l’IA des micro-apprentissages vivants, qui évoluent grâce à la communauté.',
+      'Créez des missions quotidiennes, à vivre seul ou à plusieurs.',
     homeIntentionLabel: 'Décris ton intention en quelques mots',
     homeAddDocs: '+ Ajouter des documents',
     homeGuided: 'Guidé',
@@ -247,7 +252,12 @@ export const translations = {
     inlineClarifyHint:
       "Il va être difficile de créer un rituel avec cette demande. Peux-tu préciser ton objectif (action + résultat) ?",
     inlineClarifyHintSingleTerm: 'Peux-tu préciser ce que tu veux faire, et dans quel contexte ?',
+    actionabilityNotActionableHint:
+      "Il va être difficile de créer un rituel avec cette demande. Peux-tu reformuler avec une action (faire / apprendre / améliorer) ?",
     lastSubmittedLabel: 'Dernière demande :',
+    safetyInlineMessage: "Nous ne pouvons pas générer de rituel à partir de cette demande.",
+    safetyInlineSecondary:
+      "Tu peux par exemple essayer un rituel de pleine conscience, de respiration ou de recentrage.",
     homeHistoryTitle: 'Historique local',
     homeHistorySubtitle: 'Ton dernier rituel est stocké sur cet appareil.',
     homeHistoryLoading: 'Chargement de ton historique local…',
@@ -345,8 +355,8 @@ export const translations = {
     navDemo: 'Demo',
     floatingStart: 'Empezar',
     floatingStartAria: 'Comenzar la siguiente misión',
-    homeTagline: 'Da alas a tus proyectos.',
-    homeHeroTitle: 'Crea microaprendizajes vivos con IA que evolucionan gracias a la comunidad.',
+    homeTagline: '¿Cuál es tu próximo desafío?',
+    homeHeroTitle: 'Crea misiones diarias, para hacer solo o en grupo.',
     homeIntentionLabel: 'Describe tu intención en pocas palabras',
     homeAddDocs: '+ Añadir documentos',
     homeGuided: 'Guiado',
@@ -389,7 +399,12 @@ export const translations = {
     inlineClarifyHint:
       'Será difícil crear un ritual con esta petición. ¿Puedes precisar tu objetivo (acción + resultado)?',
     inlineClarifyHintSingleTerm: '¿Puedes precisar qué quieres hacer y en qué contexto?',
+    actionabilityNotActionableHint:
+      'Será difícil crear un ritual con esta petición. ¿Puedes reformular con una acción (hacer / aprender / mejorar)?',
     lastSubmittedLabel: 'Última petición:',
+    safetyInlineMessage: 'No podemos generar un ritual a partir de esta petición.',
+    safetyInlineSecondary:
+      'Puedes probar por ejemplo un ritual de mindfulness, respiración o recentrado.',
     safetyChoiceOrganize: 'Organizarme mejor en 10 minutos al día',
     safetyChoiceGuitar: 'Aprender lo básico de guitarra en 30 días',
     safetyChoiceEnglish: 'Mejorar mi inglés hablado para el trabajo',
@@ -512,9 +527,8 @@ export const translations = {
     navDemo: 'Demo',
     floatingStart: 'Starten',
     floatingStartAria: 'Nächste Mission starten',
-    homeTagline: 'Gib deinen Projekten Flügel.',
-    homeHeroTitle:
-      'Erstelle KI-gestützte lebendige Micro-Learnings, die sich dank der Community weiterentwickeln.',
+    homeTagline: 'Was ist deine nächste Herausforderung?',
+    homeHeroTitle: 'Erstelle tägliche Missionen, alleine oder mit anderen.',
     homeIntentionLabel: 'Beschreibe dein Ziel in wenigen Worten',
     homeAddDocs: '+ Dokumente hinzufügen',
     homeGuided: 'Geführt',
@@ -557,7 +571,12 @@ export const translations = {
     inlineClarifyHint:
       'Es wird schwierig sein, mit dieser Anfrage ein Ritual zu erstellen. Kannst du dein Ziel (Aktion + Ergebnis) präzisieren?',
     inlineClarifyHintSingleTerm: 'Kannst du präzisieren, was du tun möchtest und in welchem Kontext?',
+    actionabilityNotActionableHint:
+      'Es wird schwierig sein, mit dieser Anfrage ein Ritual zu erstellen. Kannst du mit einer Aktion umformulieren (tun / lernen / verbessern)?',
     lastSubmittedLabel: 'Letzte Anfrage:',
+    safetyInlineMessage: 'Wir können aus dieser Anfrage kein Ritual erstellen.',
+    safetyInlineSecondary:
+      'Du kannst zum Beispiel ein Achtsamkeits-, Atem- oder Zentrierungsritual ausprobieren.',
     safetyChoiceOrganize: 'Besser organisieren in 10 Minuten pro Tag',
     safetyChoiceGuitar: 'Die Grundlagen der Gitarre in 30 Tagen lernen',
     safetyChoiceEnglish: 'Mein gesprochenes Englisch für die Arbeit verbessern',
@@ -680,9 +699,9 @@ export const translations = {
     navDemo: 'Demo',
     floatingStart: 'Inizia',
     floatingStartAria: 'Avvia la prossima missione',
-    homeTagline: 'Dai ali ai tuoi progetti.',
+    homeTagline: 'Qual è la tua prossima sfida?',
     homeHeroTitle:
-      "Crea micro-apprendimenti vivi con l’IA che evolvono grazie alla comunità.",
+      "Crea missioni quotidiane, da vivere da solo o in gruppo.",
     homeIntentionLabel: 'Descrivi la tua intenzione in poche parole',
     homeAddDocs: '+ Aggiungi documenti',
     homeGuided: 'Guidato',
@@ -725,7 +744,12 @@ export const translations = {
     inlineClarifyHint:
       'Sarà difficile creare un rituale con questa richiesta. Puoi precisare il tuo obiettivo (azione + risultato)?',
     inlineClarifyHintSingleTerm: 'Puoi precisare cosa vuoi fare e in quale contesto?',
+    actionabilityNotActionableHint:
+      'Sarà difficile creare un rituale con questa richiesta. Puoi riformulare con un\'azione (fare / imparare / migliorare)?',
     lastSubmittedLabel: 'Ultima richiesta:',
+    safetyInlineMessage: 'Non possiamo generare un rituale da questa richiesta.',
+    safetyInlineSecondary:
+      'Puoi ad esempio provare un rituale di mindfulness, respirazione o recentramento.',
     safetyChoiceOrganize: 'Organizzarmi meglio in 10 minuti al giorno',
     safetyChoiceGuitar: 'Imparare le basi della chitarra in 30 giorni',
     safetyChoiceEnglish: 'Migliorare il mio inglese parlato per il lavoro',

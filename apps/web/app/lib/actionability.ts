@@ -3,6 +3,10 @@
  * Décide si une intention est "actionable" pour créer un rituel, ou si on demande une précision inline.
  */
 
+import type { ActionabilityGateResult, ActionabilityStatus } from './actionability/types';
+
+export type { ActionabilityGateResult, ActionabilityStatus } from './actionability/types';
+
 export type DominantScript = 'cjk' | 'hangul' | 'latin' | 'other';
 
 export type ActionabilityAction = 'actionable' | 'not_actionable_inline' | 'borderline';
@@ -167,10 +171,49 @@ function latinWordCount(text: string): number {
   return latinPart ? latinPart.split(/\s+/).filter(Boolean).length : 0;
 }
 
+/** Social / greeting patterns (lowercase, no accents for Latin). */
+const SOCIAL_PATTERNS = [
+  /^(bonjour|salut|coucou|hello|hi|hey|yo|ciao|hola|hallo)$/i,
+  /^comment\s+(ca|ça)\s+va\s*\??$/i,
+  /^how\s+are\s+you\s*\??$/i,
+  /^what'?s\s+up\s*\??$/i,
+  /^how\s+do\s+you\s+do\s*\??$/i,
+  /^(你好|您好|嗨|안녕|안녕하세요)$/,
+];
+
+function isSocialGreeting(text: string): boolean {
+  const t = normalize(text).toLowerCase();
+  if (!t) return false;
+  for (const p of SOCIAL_PATTERNS) {
+    if (p.test(t.trim())) return true;
+  }
+  return false;
+}
+
+/** "faire pizza", "faire des pizzas" → action de faire/créer (actionable). */
+function isFairePlusNoun(text: string): boolean {
+  const lower = normalize(text).toLowerCase();
+  return /^\s*faire\s+(des?\s+)?[\p{L}]+/u.test(lower) || /^\s*(make|build|create)\s+[\p{L}]+/iu.test(lower);
+}
+
+/** "manger pizza", "eat pizza" → consume only, pas objectif apprentissage (borderline). */
+function isConsumeOnly(text: string): boolean {
+  const lower = normalize(text).toLowerCase();
+  return /^\s*(manger|eat|drink|boire|consommer)\s+/u.test(lower);
+}
+
+/** Learning/skill verb + something (apprendre, learn, improve). */
+function hasLearningVerb(text: string): boolean {
+  const lower = normalize(text).toLowerCase();
+  return /\b(apprendre|learn|improve|ameliorer|study|étudier)\b/i.test(lower);
+}
+
 /**
  * Actionability Gate v2: décision sans LLM.
+ * @param text - Intention utilisateur
+ * @param timeframe_days - Optionnel; si présent et objectif apprentissage, favorise ACTIONABLE
  */
-export function runActionabilityV2(text: string): ActionabilityResult {
+export function runActionabilityV2(text: string, timeframe_days?: number): ActionabilityResult {
   const normalized = normalize(text);
   const letters = lettersOnly(normalized);
   const scriptStats = detectScriptStats(normalized);
@@ -196,6 +239,18 @@ export function runActionabilityV2(text: string): ActionabilityResult {
     };
   }
 
+  if (isSocialGreeting(normalized)) {
+    return {
+      action: 'not_actionable_inline',
+      reason_code: 'social_chitchat',
+      debug: {
+        dominant_script: scriptStats.dominant_script,
+        ratios: scriptStats.ratios,
+        features,
+      },
+    };
+  }
+
   if (features.has_digit || features.has_cefr || features.has_structure) {
     return {
       action: 'actionable',
@@ -210,6 +265,42 @@ export function runActionabilityV2(text: string): ActionabilityResult {
 
   const { dominant_script } = scriptStats;
   const { char_count_effective, latin_word_count } = features;
+
+  if (dominant_script === 'latin' || scriptStats.ratios.latin >= 0.5) {
+    if (isFairePlusNoun(normalized)) {
+      return {
+        action: 'actionable',
+        reason_code: 'actionable',
+        debug: {
+          dominant_script,
+          ratios: scriptStats.ratios,
+          features,
+        },
+      };
+    }
+    if (isConsumeOnly(normalized)) {
+      return {
+        action: 'borderline',
+        reason_code: 'borderline_actionable',
+        debug: {
+          dominant_script,
+          ratios: scriptStats.ratios,
+          features,
+        },
+      };
+    }
+    if (typeof timeframe_days === 'number' && timeframe_days >= 30 && hasLearningVerb(normalized) && latin_word_count >= 2) {
+      return {
+        action: 'actionable',
+        reason_code: 'actionable',
+        debug: {
+          dominant_script,
+          ratios: scriptStats.ratios,
+          features,
+        },
+      };
+    }
+  }
 
   if (dominant_script === 'cjk' || dominant_script === 'hangul') {
     if (char_count_effective >= 6) {
@@ -275,5 +366,27 @@ export function runActionabilityV2(text: string): ActionabilityResult {
       ratios: scriptStats.ratios,
       features,
     },
+  };
+}
+
+/** Map rule-based result to unified gate result (status uppercase, mode inline). */
+export function toGateResult(result: ActionabilityResult): ActionabilityGateResult {
+  const status: ActionabilityStatus =
+    result.action === 'actionable'
+      ? 'ACTIONABLE'
+      : result.action === 'not_actionable_inline'
+        ? 'NOT_ACTIONABLE_INLINE'
+        : 'BORDERLINE';
+  return {
+    status,
+    reason_code: result.reason_code as ActionabilityGateResult['reason_code'],
+    mode: 'inline',
+    debug: result.debug
+      ? {
+          dominant_script: result.debug.dominant_script,
+          ratios: result.debug.ratios,
+          features: result.debug.features as Record<string, unknown>,
+        }
+      : undefined,
   };
 }

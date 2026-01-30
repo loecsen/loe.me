@@ -34,8 +34,10 @@
 .form {
   display: grid;
   gap: 26px;
-  max-width: 550px;
+  width: 100%;
+  max-width: 708px; /* 660px content + 24px padding × 2 */
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .section {
@@ -58,16 +60,24 @@
   padding: 20px 24px;
   display: grid;
   gap: 16px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .intentionCard {
   min-height: auto;
+  grid-template-columns: 1fr;
+  grid-template-rows: 112px auto;
+  gap: 8px 0;
 }
 
 .daysCard {
   height: auto;
   padding: 20px 24px;
   gap: 16px;
+  grid-template-columns: 1fr;
+  min-width: 0;
 }
 
 .intentionInput {
@@ -79,10 +89,24 @@
   padding: 10px 6px;
   font-size: 20px;
   line-height: 1.3;
-  color: rgba(20, 20, 40, 0.85);
+  color: rgba(0, 0, 0, 1);
   background: transparent;
+  background-clip: unset;
+  -webkit-background-clip: unset;
+  border-image: none;
   font-family: inherit;
   font-weight: 400;
+}
+
+.intentionInput:focus,
+.intentionInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.intentionCard:focus-within {
+  border-color: #c7b8ff;
+  box-shadow: 0 0 0 4px rgba(198, 176, 255, 0.2);
 }
 
 .intentionInput::placeholder {
@@ -94,9 +118,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 2px;
+  padding-top: 10px;
   margin-top: -10px;
   gap: 12px;
+  border-top: 1px solid rgba(189, 188, 188, 1);
+  border-right: none;
+  border-bottom: none;
+  border-left: none;
+  color: rgba(196, 196, 196, 1);
+  vertical-align: top;
 }
 
 .addDocs {
@@ -142,8 +172,31 @@
 
 .inlineClarifyMessage {
   font-size: 14px;
-  color: #4c5561;
+  color: #7b56ff;
+  font-weight: 700;
   margin: 0 0 8px 0;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.inlineClarifyMessageSecondary {
+  font-size: 13px;
+  color: rgba(20, 20, 40, 0.55);
+  margin: 0 0 8px 0;
+}
+
+.suggestedRephraseButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: #7b56ff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.suggestedRephraseButton:hover {
+  color: #5a3fd4;
 }
 
 .daysHero {
@@ -298,6 +351,35 @@
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+}
+
+/* Toggle Mock UI — même typo que home-admin-link, tokens only */
+.mockUiToggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--loe-font-size-sm);
+  color: var(--loe-color-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: var(--loe-radius-pill);
+}
+
+.mockUiToggle:hover {
+  color: var(--loe-color-muted-light);
+}
+
+.mockUiToggle:focus-visible {
+  outline: 2px solid var(--loe-color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Form et cartes (intention + jours) à 660px de contenu dès qu’il y a la place */
+@media (min-width: 756px) {
+  .form {
+    width: 708px;
+  }
 }
 
 @media (max-width: 720px) {

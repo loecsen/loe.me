@@ -148,6 +148,13 @@ export default function MissionPage() {
   }, [isCreating]);
 
   useEffect(() => {
+    if (!isCreating || creatingStatus !== 'error' || !creatingErrorReason || !pendingRequest) return;
+    router.replace(
+      `/?safetyBlock=1&intention=${encodeURIComponent(pendingRequest.intention)}`,
+    );
+  }, [isCreating, creatingStatus, creatingErrorReason, pendingRequest, router]);
+
+  useEffect(() => {
     if (!isCreating || typeof window === 'undefined') return;
     if (pendingRequest) return;
     try {
@@ -330,10 +337,20 @@ export default function MissionPage() {
           ritualId?: string;
           debugTrace?: TraceEvent[];
           blocked?: boolean;
+          block_reason?: string;
           reason_code?: string;
+          clarification?: { mode?: string; type?: string };
         };
         if (payload?.debugTrace) {
           setDebugTrace(payload.debugTrace);
+        }
+        if (payload?.blocked && payload?.clarification?.mode === 'inline' && payload?.clarification?.type === 'safety') {
+          window.sessionStorage.removeItem(PENDING_REQUEST_KEY);
+          inflightRef.current = false;
+          router.replace(
+            `/?safetyBlock=1&intention=${encodeURIComponent(pendingRequest.intention)}`,
+          );
+          return;
         }
         if (!response.ok) {
           if (payload && typeof payload === 'object' && 'error' in payload) {
@@ -519,13 +536,7 @@ export default function MissionPage() {
         {creatingStatus === 'generating' && !creatingErrorReason && creationIntro}
         {creatingStatus === 'error' && creatingErrorReason ? (
           <div className="creating-preview-card">
-            <h2>{t.safetyGateBlockedTitle}</h2>
-            <p>{t.safetyGateBlockedBody}</p>
-            <div className="creating-actions">
-              <button className="secondary-button" type="button" onClick={() => router.push('/')}>
-                {t.safetyGateBack}
-              </button>
-            </div>
+            <div className="ritual-loading-spinner" />
           </div>
         ) : creatingStatus === 'error' ? (
           <div className="creating-preview-card">

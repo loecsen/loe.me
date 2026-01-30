@@ -348,12 +348,13 @@ const validatePayload = (payload: RawPayload) => {
 
 export async function POST(request: Request) {
   try {
-    const { intention, days, locale, clarification, ritualId: requestedRitualId } =
+    const { intention, days, locale, clarification, ritualId: requestedRitualId, normalized_intent } =
       (await request.json()) as {
       intention?: string;
       days?: number;
       locale?: string;
-        ritualId?: string;
+      ritualId?: string;
+      normalized_intent?: string;
       clarification?: {
         originalIntention: string;
         chosenLabel: string;
@@ -382,7 +383,9 @@ export async function POST(request: Request) {
     const apiKey = process.env.OPENAI_API_KEY;
     const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
-    const rawIntention = typeof intention === 'string' ? intention.trim() : '';
+    const rawIntention =
+      (typeof normalized_intent === 'string' ? normalized_intent.trim() : null) ||
+      (typeof intention === 'string' ? intention.trim() : '');
     console.log('[missions.generate] incoming', {
       intention: rawIntention,
       days: safeDays,
@@ -399,11 +402,17 @@ export async function POST(request: Request) {
     const debugEnabled = process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production';
     const trace: TraceEvent[] | undefined = debugEnabled ? [] : undefined;
 
-    const actionabilityResult = runActionabilityV2(rawIntention);
+    const actionabilityResult = runActionabilityV2(rawIntention, safeDays);
     if (debugEnabled && trace) {
+      const status =
+        actionabilityResult.action === 'actionable'
+          ? 'ACTIONABLE'
+          : actionabilityResult.action === 'not_actionable_inline'
+            ? 'NOT_ACTIONABLE_INLINE'
+            : 'BORDERLINE';
       pushTrace(trace, {
         gate: 'actionability_v2',
-        outcome: actionabilityResult.action === 'actionable' ? 'ok' : 'needs_clarification',
+        outcome: status,
         reason_code: actionabilityResult.reason_code,
         meta: { actionability_v2: actionabilityResult.debug },
       });
@@ -439,14 +448,13 @@ export async function POST(request: Request) {
           intentionExcerpt: rawIntention.slice(0, 120),
         });
       }
-      return NextResponse.json(
-        {
-          blocked: true,
-          reason_code: safetyVerdict.reason_code,
-          ...(debugEnabled ? { debugTrace: trace } : {}),
-        },
-        { status: 400 },
-      );
+      return NextResponse.json({
+        blocked: true,
+        block_reason: safetyVerdict.reason_code,
+        clarification: { mode: 'inline', type: 'safety' },
+        debug: { safety: { reason_code: safetyVerdict.reason_code } },
+        ...(debugEnabled ? { debugTrace: trace } : {}),
+      });
     }
 
     const gate = runSafetyGate(rawIntention, resolvedLocale);

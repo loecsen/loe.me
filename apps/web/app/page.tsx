@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Container } from '@loe/ui';
 import { useI18n } from './components/I18nProvider';
 import RitualHistory from './components/RitualHistory';
+import { getMockHomeData } from './PourLaMaquette/getMockHomeData';
+import { runActionabilityV2, toGateResult } from './lib/actionability';
 import styles from './page.module.css';
 
 const dayOptions = [7, 14, 30, 60, 90] as const;
@@ -22,6 +24,11 @@ const getNearestDayOption = (value: number) => {
   );
 };
 
+const MOCK_UI_STORAGE_KEY = 'loe_mock_ui';
+const showDevTools =
+  process.env.NODE_ENV === 'development' ||
+  process.env.NEXT_PUBLIC_SHOW_DEV_TOOLS === '1';
+
 export default function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,20 +39,65 @@ export default function HomePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastSubmittedIntent, setLastSubmittedIntent] = useState('');
   const [inlineHint, setInlineHint] = useState<string | null>(null);
+  const [inlineHintSecondary, setInlineHintSecondary] = useState<string | null>(null);
+  const [suggestedRephrase, setSuggestedRephrase] = useState<string | null>(null);
+  const [mockUIEnabled, setMockUIEnabled] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (!showDevTools) return;
+    const fromUrl = searchParams.get('mock') === '1';
+    if (fromUrl) {
+      setMockUIEnabled(true);
+      return;
+    }
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem(MOCK_UI_STORAGE_KEY) : null;
+      setMockUIEnabled(stored === '1');
+    } catch {
+      setMockUIEnabled(false);
+    }
+  }, [searchParams]);
+
+  const handleMockUIToggle = () => {
+    const next = !mockUIEnabled;
+    setMockUIEnabled(next);
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(MOCK_UI_STORAGE_KEY, next ? '1' : '0');
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const mockTabData =
+    (mockUIEnabled || process.env.NEXT_PUBLIC_USE_MOCKS === '1')
+      ? getMockHomeData().tabs
+      : null;
 
   useEffect(() => {
     const inlineClarify = searchParams.get('inlineClarify') === '1';
+    const safetyBlock = searchParams.get('safetyBlock') === '1';
     const intentionParam = searchParams.get('intention');
     const reasonCode = searchParams.get('reason_code');
     if (inlineClarify && intentionParam != null) {
       const decoded = decodeURIComponent(intentionParam);
       setIntention(decoded);
       setLastSubmittedIntent(decoded);
+      setInlineHintSecondary(null);
       const hint =
         reasonCode === 'single_term'
           ? (t as { inlineClarifyHintSingleTerm?: string }).inlineClarifyHintSingleTerm ?? (t as { inlineClarifyHint?: string }).inlineClarifyHint
           : (t as { inlineClarifyHint?: string }).inlineClarifyHint;
       setInlineHint(hint ?? null);
+      router.replace('/', { scroll: false });
+    } else if (safetyBlock && intentionParam != null) {
+      const decoded = decodeURIComponent(intentionParam);
+      setIntention(decoded);
+      setLastSubmittedIntent(decoded);
+      setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
+      setInlineHintSecondary((t as { safetyInlineSecondary?: string }).safetyInlineSecondary ?? null);
       router.replace('/', { scroll: false });
     }
   }, [searchParams, router, t]);
@@ -71,9 +123,6 @@ export default function HomePage() {
   const activeDayOption = useMemo(() => getNearestDayOption(finalDays), [finalDays]);
   const dayStage = dayStages[activeDayOption] ?? { icon: '🌿', label: 'Foundations' };
   const sliderProgress = (finalDays - 7) / (90 - 7);
-  const intentionTitle = isFrench
-    ? 'Que voulez-vous apprendre ou améliorer ?'
-    : 'What do you want to learn or progress on?';
   const daysTitle = isFrench
     ? 'Combien de jours avez-vous pour atteindre votre objectif ?'
     : 'How many days do you have to reach your goal?';
@@ -124,13 +173,95 @@ export default function HomePage() {
     setIsSubmitting(true);
     setSubmitError(null);
     setInlineHint(null);
+    setInlineHintSecondary(null);
+    setSuggestedRephrase(null);
     const ritualId = createRitualId();
+    const trimmed = intention.trim();
+
     try {
+      const gate = toGateResult(runActionabilityV2(trimmed, finalDays));
+
+      if (gate.status === 'NOT_ACTIONABLE_INLINE') {
+        setLastSubmittedIntent(trimmed);
+        setInlineHint((t as { actionabilityNotActionableHint?: string }).actionabilityNotActionableHint ?? null);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (gate.status === 'BORDERLINE') {
+        const classifyRes = await fetch('/api/actionability/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent: trimmed, timeframe_days: finalDays }),
+        });
+        const classifyData = (await classifyRes.json()) as {
+          verdict?: string;
+          normalized_intent?: string;
+          suggested_rephrase?: string | null;
+        };
+        if (classifyData.verdict === 'ACTIONABLE') {
+          const intentionToSend = classifyData.normalized_intent?.trim() || trimmed;
+          const res = await fetch('/api/missions/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              intention: intentionToSend,
+              days: finalDays,
+              locale,
+              ritualId,
+            }),
+          });
+          const data = await res.json();
+          const payload = data?.data ?? data;
+          if (data?.blocked && data?.clarification?.mode === 'inline' && data?.clarification?.type === 'safety') {
+            setLastSubmittedIntent(trimmed);
+            setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
+            setInlineHintSecondary((t as { safetyInlineSecondary?: string }).safetyInlineSecondary ?? null);
+            setIsSubmitting(false);
+            return;
+          }
+          if (data?.blocked) {
+            setSubmitError(data.block_reason ?? data.reason_code ?? 'blocked');
+            setIsSubmitting(false);
+            return;
+          }
+          if (!res.ok) {
+            setSubmitError(data?.details ?? data?.error ?? 'error');
+            setIsSubmitting(false);
+            return;
+          }
+          if (payload?.path && payload?.missionStubs) {
+            const ok = storePendingRequest({
+              ritualId,
+              intention: intentionToSend,
+              days: finalDays,
+              locale,
+            });
+            if (ok && typeof window !== 'undefined') {
+              try {
+                window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(payload));
+              } catch {
+                /* ignore */
+              }
+            }
+            setIsSubmitting(false);
+            router.push(`/mission?creating=1&ritualId=${ritualId}`);
+            return;
+          }
+        }
+        setLastSubmittedIntent(trimmed);
+        setInlineHint((t as { actionabilityNotActionableHint?: string }).actionabilityNotActionableHint ?? null);
+        setSuggestedRephrase(classifyData.suggested_rephrase ?? null);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const intentionToSend = trimmed;
       const res = await fetch('/api/missions/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          intention: intention.trim(),
+          intention: intentionToSend,
           days: finalDays,
           locale,
           ritualId,
@@ -139,7 +270,8 @@ export default function HomePage() {
       const data = await res.json();
       const payload = data?.data ?? data;
       if (payload?.needsClarification && payload?.clarification?.mode === 'inline') {
-        setLastSubmittedIntent(intention.trim());
+        setLastSubmittedIntent(trimmed);
+        setInlineHintSecondary(null);
         const reasonCode = payload.clarification?.reason_code;
         const hint =
           reasonCode === 'single_term'
@@ -149,8 +281,15 @@ export default function HomePage() {
         setIsSubmitting(false);
         return;
       }
+      if (data?.blocked && data?.clarification?.mode === 'inline' && data?.clarification?.type === 'safety') {
+        setLastSubmittedIntent(trimmed);
+        setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
+        setInlineHintSecondary((t as { safetyInlineSecondary?: string }).safetyInlineSecondary ?? null);
+        setIsSubmitting(false);
+        return;
+      }
       if (data?.blocked) {
-        setSubmitError(data.reason_code ?? 'blocked');
+        setSubmitError(data.block_reason ?? data.reason_code ?? 'blocked');
         setIsSubmitting(false);
         return;
       }
@@ -162,7 +301,7 @@ export default function HomePage() {
       if (payload?.path && payload?.missionStubs) {
         const ok = storePendingRequest({
           ritualId,
-          intention: intention.trim(),
+          intention: intentionToSend,
           days: finalDays,
           locale,
         });
@@ -193,26 +332,54 @@ export default function HomePage() {
           <h1 className={styles.heroTitle}>{t.homeTagline}</h1>
           <p className={styles.heroSubtitle}>{t.homeHeroTitle}</p>
         </div>
-        <form className={styles.form} onSubmit={handleSubmit}>
+        <form ref={formRef} className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>{intentionTitle}</h2>
             <div className={`${styles.card} ${styles.intentionCard}`}>
               <textarea
                 id="ritual-intention"
                 className={styles.intentionInput}
                 placeholder={placeholderText}
                 value={intention}
-                onChange={(event) => setIntention(event.target.value)}
+                onChange={(event) => {
+                  setIntention(event.target.value);
+                  if (event.target.value.trim()) {
+                    setInlineHint(null);
+                    setInlineHintSecondary(null);
+                    setSuggestedRephrase(null);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    formRef.current?.requestSubmit();
+                  }
+                }}
                 rows={3}
               />
-              {inlineHint && (
+              {(inlineHint || inlineHintSecondary || suggestedRephrase) && (
                 <>
-                  {lastSubmittedIntent && (
-                    <p className={styles.lastSubmitted}>
-                      {t.lastSubmittedLabel} {lastSubmittedIntent}
+                  {inlineHint && (
+                    <p className={styles.inlineClarifyMessage}>{inlineHint}</p>
+                  )}
+                  {inlineHintSecondary && (
+                    <p className={styles.inlineClarifyMessageSecondary}>{inlineHintSecondary}</p>
+                  )}
+                  {suggestedRephrase && (
+                    <p className={styles.inlineClarifyMessageSecondary}>
+                      {isFrench ? 'Suggestion : ' : 'Suggestion: '}
+                      <button
+                        type="button"
+                        className={styles.suggestedRephraseButton}
+                        onClick={() => {
+                          setIntention(suggestedRephrase);
+                          setSuggestedRephrase(null);
+                          setInlineHint(null);
+                        }}
+                      >
+                        {suggestedRephrase}
+                      </button>
                     </p>
                   )}
-                  <p className={styles.inlineClarifyMessage}>{inlineHint}</p>
                 </>
               )}
               <div className={styles.cardFooter}>
@@ -326,12 +493,25 @@ export default function HomePage() {
           <a href="/admin/domains?key=1">Admin domains</a>
           {' · '}
           <a href="/admin/safety?key=1">Admin safety</a>
-          </div>
+          {showDevTools && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                className={styles.mockUiToggle}
+                onClick={handleMockUIToggle}
+                aria-pressed={mockUIEnabled}
+              >
+                Mock UI: {mockUIEnabled ? 'ON' : 'OFF'}
+              </button>
+            </>
+          )}
+        </div>
         </div>
         </section>
       </Container>
 
-      <RitualHistory />
+      <RitualHistory mockTabData={mockTabData} />
     </>
   );
 }
