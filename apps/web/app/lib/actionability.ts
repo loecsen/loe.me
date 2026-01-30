@@ -4,8 +4,10 @@
  */
 
 import type { ActionabilityGateResult, ActionabilityStatus } from './actionability/types';
+import { Category } from './category';
 
 export type { ActionabilityGateResult, ActionabilityStatus } from './actionability/types';
+export type { Category } from './category';
 
 export type DominantScript = 'cjk' | 'hangul' | 'latin' | 'other';
 
@@ -43,10 +45,12 @@ export type ActionabilityFeatures = {
 export type ActionabilityResult = {
   action: ActionabilityAction;
   reason_code: ActionabilityReasonCode;
+  category?: string;
   debug: {
     dominant_script: DominantScript;
     ratios: Record<string, number>;
     features: ActionabilityFeatures;
+    category?: string;
   };
 };
 
@@ -126,6 +130,19 @@ const DISPLAY_LANG_FALLBACKS: Record<string, DisplayLang> = {
   ru: 'ru',
 };
 
+/** Latin script: detect FR/ES from diacritics or common words; else fallback uiLocale. */
+function detectLatinDisplayLang(text: string, uiLocale: string): DisplayLang {
+  const lower = text.toLowerCase();
+  const hasFrenchDiacritics = /[àâäéèêëïîôùûüÿçœæ]/u.test(text);
+  const hasSpanishDiacritics = /[áéíóúñü¿¡]/u.test(text);
+  const frenchWords = /\b(le|la|les|des|un|une|en|et|est|sont|être|avoir|ça|pour|avec|dans|apprendre|améliorer|français)\b/i.test(lower);
+  const spanishWords = /\b(el|la|los|las|un|una|en|y|es|son|estar|tener|para|con|qué|aprender|español)\b/i.test(lower);
+  if (hasFrenchDiacritics || frenchWords) return 'fr';
+  if (hasSpanishDiacritics || spanishWords) return 'es';
+  const base = (uiLocale ?? '').split('-')[0]?.toLowerCase() ?? 'en';
+  return (DISPLAY_LANG_FALLBACKS[base] as DisplayLang) ?? 'en';
+}
+
 export function getDisplayLanguage(intent: string, uiLocale: string): DisplayLang {
   const trimmed = (intent ?? '').trim();
   if (!trimmed) {
@@ -136,17 +153,20 @@ export function getDisplayLanguage(intent: string, uiLocale: string): DisplayLan
   let kana = 0;
   let cjk = 0;
   let cyrillic = 0;
+  let latin = 0;
   for (const char of trimmed) {
     const code = char.codePointAt(0) ?? 0;
     if (isHangul(code)) hangul++;
     else if (isKana(code)) kana++;
     else if (isCJKIdeograph(code)) cjk++;
     else if (isCyrillic(code)) cyrillic++;
+    else if (isLatin(code)) latin++;
   }
   if (hangul > 0) return 'ko';
   if (kana > 0) return 'ja';
   if (cjk > 0) return 'zh';
   if (cyrillic > 0) return 'ru';
+  if (latin > 0) return detectLatinDisplayLang(trimmed, uiLocale);
   const base = (uiLocale ?? '').split('-')[0]?.toLowerCase() ?? 'en';
   return (DISPLAY_LANG_FALLBACKS[base] as DisplayLang) ?? 'en';
 }
@@ -262,6 +282,34 @@ function hasLearningVerb(text: string): boolean {
   return /\b(apprendre|learn|improve|ameliorer|study|étudier)\b/i.test(lower);
 }
 
+/** Wellbeing / grounding keywords (including vague emotional/relationship intents). */
+function hasWellbeingHint(text: string): boolean {
+  const lower = normalize(text).toLowerCase();
+  return (
+    /\b(meditation|mindfulness|breath|respiration|sleep|sommeil|stress|relax|yoga|pleine conscience)\b/i.test(lower) ||
+    /\b(triste|sad|récupérer|recover|bien-être|wellbeing|émotion|emotion|sentiment|feeling)\b/i.test(lower) ||
+    /\b(ex\s+copine|ex\s+copain|ex\s+partner|mon ex)\b/i.test(lower)
+  );
+}
+
+/** Challenge / transformation keywords. */
+function hasChallengeHint(text: string): boolean {
+  const lower = normalize(text).toLowerCase();
+  return /\b(challenge|défi|transformation|habitude|routine)\b/i.test(lower);
+}
+
+/** Infer category from intent (heuristic only; classifier can override). */
+export function inferCategoryFromIntent(text: string): string | undefined {
+  const normalized = normalize(text);
+  if (!normalized) return undefined;
+  if (isSocialGreeting(normalized)) return Category.SOCIAL;
+  if (hasLearningVerb(normalized)) return Category.LEARN;
+  if (isFairePlusNoun(normalized)) return Category.CREATE;
+  if (hasWellbeingHint(normalized)) return Category.WELLBEING;
+  if (hasChallengeHint(normalized)) return Category.CHALLENGE;
+  return undefined;
+}
+
 /**
  * Actionability Gate v2: décision sans LLM.
  * @param text - Intention utilisateur
@@ -271,6 +319,7 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
   const normalized = normalize(text);
   const letters = lettersOnly(normalized);
   const scriptStats = detectScriptStats(normalized);
+  const inferredCategory = inferCategoryFromIntent(normalized);
 
   const features: ActionabilityFeatures = {
     char_count_effective: letters.length,
@@ -285,10 +334,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
     return {
       action: 'not_actionable_inline',
       reason_code: 'noise',
+      category: inferredCategory,
       debug: {
         dominant_script: scriptStats.dominant_script,
         ratios: scriptStats.ratios,
         features,
+        category: inferredCategory,
       },
     };
   }
@@ -297,10 +348,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
     return {
       action: 'not_actionable_inline',
       reason_code: 'social_chitchat',
+      category: inferredCategory,
       debug: {
         dominant_script: scriptStats.dominant_script,
         ratios: scriptStats.ratios,
         features,
+        category: inferredCategory,
       },
     };
   }
@@ -309,10 +362,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
     return {
       action: 'actionable',
       reason_code: 'actionable',
+      category: inferredCategory,
       debug: {
         dominant_script: scriptStats.dominant_script,
         ratios: scriptStats.ratios,
         features,
+        category: inferredCategory,
       },
     };
   }
@@ -325,10 +380,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
       return {
         action: 'actionable',
         reason_code: 'actionable',
+        category: inferredCategory,
         debug: {
           dominant_script,
           ratios: scriptStats.ratios,
           features,
+          category: inferredCategory,
         },
       };
     }
@@ -336,10 +393,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
       return {
         action: 'borderline',
         reason_code: 'borderline_actionable',
+        category: inferredCategory,
         debug: {
           dominant_script,
           ratios: scriptStats.ratios,
           features,
+          category: inferredCategory,
         },
       };
     }
@@ -347,10 +406,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
       return {
         action: 'actionable',
         reason_code: 'actionable',
+        category: inferredCategory,
         debug: {
           dominant_script,
           ratios: scriptStats.ratios,
           features,
+          category: inferredCategory,
         },
       };
     }
@@ -361,10 +422,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
       return {
         action: 'actionable',
         reason_code: 'actionable',
+        category: inferredCategory,
         debug: {
           dominant_script,
           ratios: scriptStats.ratios,
           features,
+          category: inferredCategory,
         },
       };
     }
@@ -372,20 +435,24 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
       return {
         action: 'not_actionable_inline',
         reason_code: 'too_short_cjk',
+        category: inferredCategory,
         debug: {
           dominant_script,
           ratios: scriptStats.ratios,
           features,
+          category: inferredCategory,
         },
       };
     }
     return {
       action: 'borderline',
       reason_code: 'borderline_actionable',
+      category: inferredCategory,
       debug: {
         dominant_script,
         ratios: scriptStats.ratios,
         features,
+        category: inferredCategory,
       },
     };
   }
@@ -394,10 +461,12 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
     return {
       action: 'actionable',
       reason_code: 'actionable',
+      category: inferredCategory,
       debug: {
         dominant_script,
         ratios: scriptStats.ratios,
         features,
+        category: inferredCategory,
       },
     };
   }
@@ -405,20 +474,24 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
     return {
       action: 'not_actionable_inline',
       reason_code: 'single_term',
+      category: inferredCategory,
       debug: {
         dominant_script,
         ratios: scriptStats.ratios,
         features,
+        category: inferredCategory,
       },
     };
   }
   return {
     action: 'borderline',
     reason_code: 'borderline_actionable',
+    category: inferredCategory,
     debug: {
       dominant_script,
       ratios: scriptStats.ratios,
       features,
+      category: inferredCategory,
     },
   };
 }
@@ -435,11 +508,13 @@ export function toGateResult(result: ActionabilityResult): ActionabilityGateResu
     status,
     reason_code: result.reason_code as ActionabilityGateResult['reason_code'],
     mode: 'inline',
+    category: result.category,
     debug: result.debug
       ? {
           dominant_script: result.debug.dominant_script,
           ratios: result.debug.ratios,
           features: result.debug.features as Record<string, unknown>,
+          category: result.debug.category,
         }
       : undefined,
   };

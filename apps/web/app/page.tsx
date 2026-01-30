@@ -6,7 +6,12 @@ import { Button, Container } from '@loe/ui';
 import { useI18n } from './components/I18nProvider';
 import RitualHistory from './components/RitualHistory';
 import { getMockHomeData } from './PourLaMaquette/getMockHomeData';
-import { runActionabilityV2, toGateResult, getDisplayLanguage } from './lib/actionability';
+import { runActionabilityV2, toGateResult, getDisplayLanguage, inferCategoryFromIntent } from './lib/actionability';
+import { runSoftRealism } from './lib/actionability/realism';
+import { categoryRequiresFeasibility } from './lib/category';
+import type { RealismAdjustment } from './lib/actionability/realism';
+import { needsAmbitionConfirmation, isLifeGoalOrRoleAspiration } from './lib/actionability/ambitionConfirmation';
+import { detectControllability } from './lib/actionability/controllability';
 import styles from './page.module.css';
 
 const dayOptions = [7, 14, 30, 60, 90] as const;
@@ -41,8 +46,44 @@ export default function HomePage() {
   const [inlineHint, setInlineHint] = useState<string | null>(null);
   const [inlineHintSecondary, setInlineHintSecondary] = useState<string | null>(null);
   const [suggestedRephrase, setSuggestedRephrase] = useState<string | null>(null);
+  const [realismPending, setRealismPending] = useState<{
+    intentionToSend: string;
+    days: number;
+    category?: string;
+    ritualId: string;
+    why_short?: string;
+    adjustments: RealismAdjustment[];
+    needsConfirmation?: boolean;
+  } | null>(null);
+  const [showConfirmationAdjustments, setShowConfirmationAdjustments] = useState(false);
+  const [stretchMessage, setStretchMessage] = useState<string | null>(null);
+  const [ambitionPending, setAmbitionPending] = useState<{
+    intent: string;
+    days: number;
+    ritualId: string;
+    marker?: string;
+  } | null>(null);
+  const [twoPathPending, setTwoPathPending] = useState<{
+    primary: string;
+    optionA: { label: string; next_intent: string };
+    optionB: { label: string; next_intent: string };
+    ritualId: string;
+    days: number;
+  } | null>(null);
+  const [lastSubmitDebug, setLastSubmitDebug] = useState<{
+    branch: string;
+    gateStatus?: string;
+    reason_code?: string;
+    categoryInferred?: string;
+    lifeGoalHit?: boolean;
+    lifeGoalMarker?: string;
+    classifyVerdict?: string;
+    classifyReason?: string;
+    classifyCategory?: string;
+  } | null>(null);
   const [mockUIEnabled, setMockUIEnabled] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const intentionInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!showDevTools) return;
@@ -149,6 +190,7 @@ export default function HomePage() {
     intention: string;
     days: number;
     locale?: string;
+    category?: string;
     clarification?: {
       originalIntention: string;
       chosenLabel: string;
@@ -165,6 +207,80 @@ export default function HomePage() {
     }
   };
 
+  const proceedToMission = async (params: {
+    intentionToSend: string;
+    days: number;
+    category?: string;
+    ritualId: string;
+    realismAck: boolean;
+  }) => {
+    const { intentionToSend, days, category, ritualId, realismAck } = params;
+    setIsSubmitting(true);
+    setRealismPending(null);
+    setShowConfirmationAdjustments(false);
+    setStretchMessage(null);
+    setAmbitionPending(null);
+    setSubmitError(null);
+    try {
+      const res = await fetch('/api/missions/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intention: intentionToSend,
+          days,
+          locale,
+          ritualId,
+          category,
+          realism_acknowledged: realismAck,
+        }),
+      });
+      const data = await res.json();
+      const payload = data?.data ?? data;
+      if (data?.blocked && data?.clarification?.mode === 'inline' && data?.clarification?.type === 'safety') {
+        setLastSubmittedIntent(intentionToSend);
+        setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
+        setInlineHintSecondary((t as { safetyInlineSecondary?: string }).safetyInlineSecondary ?? null);
+        setIsSubmitting(false);
+        return;
+      }
+      if (data?.blocked) {
+        setSubmitError(data.block_reason ?? data.reason_code ?? 'blocked');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!res.ok) {
+        setSubmitError(data?.details ?? data?.error ?? 'error');
+        setIsSubmitting(false);
+        return;
+      }
+      if (payload?.path && payload?.missionStubs) {
+        const ok = storePendingRequest({
+          ritualId,
+          intention: intentionToSend,
+          days,
+          locale,
+          category: payload?.category ?? category,
+        });
+        if (ok && typeof window !== 'undefined') {
+          try {
+            const toStore = { ...payload, debugTrace: data?.debugTrace };
+            window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(toStore));
+          } catch {
+            /* ignore */
+          }
+        }
+        setIsSubmitting(false);
+        router.push(`/mission?creating=1&ritualId=${ritualId}`);
+      } else {
+        setSubmitError('Impossible de lancer la génération.');
+        setIsSubmitting(false);
+      }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'error');
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!intention.trim() || isSubmitting) {
@@ -175,15 +291,43 @@ export default function HomePage() {
     setInlineHint(null);
     setInlineHintSecondary(null);
     setSuggestedRephrase(null);
+    setRealismPending(null);
+    setShowConfirmationAdjustments(false);
+    setStretchMessage(null);
+    setAmbitionPending(null);
+    setTwoPathPending(null);
+    setLastSubmitDebug(null);
     const ritualId = createRitualId();
     const trimmed = intention.trim();
 
     try {
-      const gate = toGateResult(runActionabilityV2(trimmed, finalDays));
+      const actionabilityResult = runActionabilityV2(trimmed, finalDays);
+      const gate = toGateResult(actionabilityResult);
+      const lifeGoalResult = isLifeGoalOrRoleAspiration(trimmed);
+
+      if (lifeGoalResult.hit) {
+        setLastSubmittedIntent(trimmed);
+        setAmbitionPending({ intent: trimmed, days: finalDays, ritualId, marker: lifeGoalResult.marker });
+        setLastSubmitDebug({
+          branch: 'life_goal_confirm',
+          gateStatus: gate.status,
+          reason_code: actionabilityResult.reason_code,
+          lifeGoalHit: true,
+          lifeGoalMarker: lifeGoalResult.marker,
+        });
+        setIsSubmitting(false);
+        return;
+      }
 
       if (gate.status === 'NOT_ACTIONABLE_INLINE') {
         setLastSubmittedIntent(trimmed);
         setInlineHint((t as { actionabilityNotActionableHint?: string }).actionabilityNotActionableHint ?? null);
+        setLastSubmitDebug({
+          branch: 'inline_hint',
+          gateStatus: gate.status,
+          reason_code: actionabilityResult.reason_code,
+          lifeGoalHit: false,
+        });
         setIsSubmitting(false);
         return;
       }
@@ -198,11 +342,40 @@ export default function HomePage() {
         const classifyData = (await classifyRes.json()) as {
           verdict?: string;
           reason_code?: string;
+          category?: string | null;
           normalized_intent?: string;
           suggested_rephrase?: string | null;
         };
         if (classifyData.verdict === 'ACTIONABLE') {
           const intentionToSend = classifyData.normalized_intent?.trim() || trimmed;
+          const realismLevel = (classifyData as { realism?: string }).realism;
+          const realismWhy = (classifyData as { realism_why_short?: string }).realism_why_short;
+          const realismAdjustments = (classifyData as { realism_adjustments?: RealismAdjustment[] }).realism_adjustments ?? [];
+          if (realismLevel === 'unrealistic' && realismAdjustments.length > 0) {
+            setLastSubmittedIntent(trimmed);
+            setRealismPending({
+              intentionToSend,
+              days: finalDays,
+              category: classifyData.category ?? undefined,
+              ritualId,
+              why_short: realismWhy,
+              adjustments: realismAdjustments,
+              needsConfirmation: needsAmbitionConfirmation(trimmed),
+            });
+            setLastSubmitDebug({
+              branch: 'realism_pending',
+              gateStatus: 'BORDERLINE',
+              reason_code: classifyData.reason_code,
+              lifeGoalHit: false,
+              classifyVerdict: classifyData.verdict,
+              classifyCategory: classifyData.category ?? undefined,
+            });
+            setIsSubmitting(false);
+            return;
+          }
+          if (realismLevel === 'stretch' && realismWhy) {
+            setStretchMessage(realismWhy);
+          }
           const res = await fetch('/api/missions/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -211,6 +384,8 @@ export default function HomePage() {
               days: finalDays,
               locale,
               ritualId,
+              category: classifyData.category ?? undefined,
+              realism_acknowledged: false,
             }),
           });
           const data = await res.json();
@@ -238,33 +413,281 @@ export default function HomePage() {
               intention: intentionToSend,
               days: finalDays,
               locale,
+              category: payload?.category,
             });
             if (ok && typeof window !== 'undefined') {
               try {
-                window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(payload));
+                const toStore = { ...payload, debugTrace: data?.debugTrace };
+                window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(toStore));
               } catch {
                 /* ignore */
               }
             }
+            setLastSubmitDebug({
+              branch: 'proceed',
+              gateStatus: 'BORDERLINE',
+              reason_code: classifyData.reason_code,
+              lifeGoalHit: false,
+              classifyVerdict: classifyData.verdict,
+              classifyCategory: classifyData.category ?? undefined,
+            });
             setIsSubmitting(false);
             router.push(`/mission?creating=1&ritualId=${ritualId}`);
             return;
           }
         }
         setLastSubmittedIntent(trimmed);
-        if (classifyData.reason_code === 'safety_no_suggestion') {
+        if (classifyData.verdict === 'BLOCKED' || classifyData.reason_code === 'safety_no_suggestion' || classifyData.reason_code === 'blocked') {
           setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
           setInlineHintSecondary((t as { safetyInlineFallbackExample?: string }).safetyInlineFallbackExample ?? null);
           setSuggestedRephrase(null);
         } else {
-          setInlineHint((t as { actionabilityNotActionableHint?: string }).actionabilityNotActionableHint ?? null);
-          setSuggestedRephrase(classifyData.suggested_rephrase ?? null);
+          const controllability = detectControllability(trimmed);
+          const useTwoPath =
+            classifyData.category === 'WELLBEING' &&
+            (classifyData.reason_code === 'ambiguous_goal' || controllability.controllability === 'PARTIALLY_EXTERNAL');
+          if (useTwoPath) {
+            setTwoPathPending({
+              primary: (t as { wellbeingTwoPathsPrimary?: string }).wellbeingTwoPathsPrimary ?? '',
+              optionA: {
+                label: String((t as { wellbeingTwoPathsOptionA?: string }).wellbeingTwoPathsOptionA ?? '').replace('{days}', String(finalDays)),
+                next_intent: (t as { wellbeingPathAIntent?: string }).wellbeingPathAIntent ?? '',
+              },
+              optionB: {
+                label: String((t as { wellbeingTwoPathsOptionB?: string }).wellbeingTwoPathsOptionB ?? '').replace('{days}', String(finalDays)),
+                next_intent: (t as { wellbeingPathBIntent?: string }).wellbeingPathBIntent ?? '',
+              },
+              ritualId,
+              days: finalDays,
+            });
+            setInlineHint(null);
+            setSuggestedRephrase(null);
+          } else {
+            const hint =
+              classifyData.category === 'WELLBEING'
+                ? ((t as { wellbeingRephraseHint?: string }).wellbeingRephraseHint ?? null)
+                : ((t as { inlineNotActionablePrimary?: string }).inlineNotActionablePrimary ?? null);
+            setInlineHint(hint);
+            setSuggestedRephrase(classifyData.suggested_rephrase ?? null);
+          }
+          setInlineHintSecondary(null);
         }
+        setLastSubmitDebug({
+          branch: 'inline_hint',
+          gateStatus: 'BORDERLINE',
+          reason_code: classifyData.reason_code,
+          lifeGoalHit: false,
+          classifyVerdict: classifyData.verdict ?? undefined,
+          classifyCategory: classifyData.category ?? undefined,
+        });
         setIsSubmitting(false);
         return;
       }
 
+      if (gate.status === 'ACTIONABLE' && categoryRequiresFeasibility(gate.category)) {
+        const displayLang = getDisplayLanguage(trimmed, locale);
+        const classifyRes = await fetch('/api/actionability/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent: trimmed, timeframe_days: finalDays, display_lang: displayLang }),
+        });
+        const classifyData = (await classifyRes.json()) as {
+          verdict?: string;
+          reason_code?: string;
+          category?: string | null;
+          normalized_intent?: string;
+          suggested_rephrase?: string | null;
+        };
+        if (classifyData.verdict === 'NEEDS_REPHRASE_INLINE') {
+          setLastSubmittedIntent(trimmed);
+          const controllability = detectControllability(trimmed);
+          const useTwoPath =
+            classifyData.category === 'WELLBEING' &&
+            (classifyData.reason_code === 'ambiguous_goal' || controllability.controllability === 'PARTIALLY_EXTERNAL');
+          if (useTwoPath) {
+            setTwoPathPending({
+              primary: (t as { wellbeingTwoPathsPrimary?: string }).wellbeingTwoPathsPrimary ?? '',
+              optionA: {
+                label: String((t as { wellbeingTwoPathsOptionA?: string }).wellbeingTwoPathsOptionA ?? '').replace('{days}', String(finalDays)),
+                next_intent: (t as { wellbeingPathAIntent?: string }).wellbeingPathAIntent ?? '',
+              },
+              optionB: {
+                label: String((t as { wellbeingTwoPathsOptionB?: string }).wellbeingTwoPathsOptionB ?? '').replace('{days}', String(finalDays)),
+                next_intent: (t as { wellbeingPathBIntent?: string }).wellbeingPathBIntent ?? '',
+              },
+              ritualId,
+              days: finalDays,
+            });
+            setInlineHint(null);
+            setSuggestedRephrase(null);
+          } else {
+            const hint =
+              classifyData.category === 'WELLBEING'
+                ? ((t as { wellbeingRephraseHint?: string }).wellbeingRephraseHint ?? null)
+                : ((t as { inlineNotActionablePrimary?: string }).inlineNotActionablePrimary ?? null);
+            const suggestion =
+              (classifyData.suggested_rephrase?.trim() || classifyData.normalized_intent?.trim()) || null;
+            if (suggestion) {
+              setInlineHint(hint);
+              setSuggestedRephrase(suggestion);
+            } else {
+              setInlineHint((t as { classifyNoSuggestionMessage?: string }).classifyNoSuggestionMessage ?? null);
+              setSuggestedRephrase(null);
+            }
+          }
+          setInlineHintSecondary(null);
+          setLastSubmitDebug({
+            branch: 'inline_hint',
+            gateStatus: gate.status,
+            reason_code: actionabilityResult.reason_code,
+            categoryInferred: gate.category,
+            lifeGoalHit: false,
+            classifyVerdict: classifyData.verdict,
+            classifyReason: classifyData.reason_code,
+            classifyCategory: classifyData.category ?? undefined,
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        if (classifyData.verdict === 'BLOCKED' || classifyData.reason_code === 'safety_no_suggestion' || classifyData.reason_code === 'blocked') {
+          setLastSubmittedIntent(trimmed);
+          setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
+          setInlineHintSecondary((t as { safetyInlineFallbackExample?: string }).safetyInlineFallbackExample ?? null);
+          setSuggestedRephrase(null);
+          setLastSubmitDebug({
+            branch: 'inline_hint',
+            gateStatus: gate.status,
+            reason_code: actionabilityResult.reason_code,
+            categoryInferred: gate.category,
+            lifeGoalHit: false,
+            classifyVerdict: classifyData.verdict,
+            classifyReason: classifyData.reason_code,
+            classifyCategory: classifyData.category ?? undefined,
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        if (classifyData.verdict === 'ACTIONABLE') {
+          const intentionToSend = classifyData.normalized_intent?.trim() || trimmed;
+          const realismLevel = (classifyData as { realism?: string }).realism;
+          const realismWhy = (classifyData as { realism_why_short?: string }).realism_why_short;
+          const realismAdjustments = (classifyData as { realism_adjustments?: RealismAdjustment[] }).realism_adjustments ?? [];
+          if (realismLevel === 'unrealistic' && realismAdjustments.length > 0) {
+            setLastSubmittedIntent(trimmed);
+            setRealismPending({
+              intentionToSend,
+              days: finalDays,
+              category: classifyData.category ?? undefined,
+              ritualId,
+              why_short: realismWhy,
+              adjustments: realismAdjustments,
+              needsConfirmation: needsAmbitionConfirmation(trimmed),
+            });
+            setLastSubmitDebug({
+              branch: 'realism_pending',
+              gateStatus: gate.status,
+              reason_code: actionabilityResult.reason_code,
+              categoryInferred: gate.category,
+              lifeGoalHit: false,
+              classifyVerdict: classifyData.verdict,
+              classifyReason: classifyData.reason_code,
+              classifyCategory: classifyData.category ?? undefined,
+            });
+            setIsSubmitting(false);
+            return;
+          }
+          if (realismLevel === 'stretch' && realismWhy) {
+            setStretchMessage(realismWhy);
+          }
+          const res = await fetch('/api/missions/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              intention: intentionToSend,
+              days: finalDays,
+              locale,
+              ritualId,
+              category: classifyData.category ?? undefined,
+              realism_acknowledged: false,
+            }),
+          });
+          const data = await res.json();
+          const payload = data?.data ?? data;
+          if (data?.blocked && data?.clarification?.mode === 'inline' && data?.clarification?.type === 'safety') {
+            setLastSubmittedIntent(trimmed);
+            setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
+            setInlineHintSecondary((t as { safetyInlineSecondary?: string }).safetyInlineSecondary ?? null);
+            setIsSubmitting(false);
+            return;
+          }
+          if (data?.blocked) {
+            setSubmitError(data.block_reason ?? data.reason_code ?? 'blocked');
+            setIsSubmitting(false);
+            return;
+          }
+          if (!res.ok) {
+            setSubmitError(data?.details ?? data?.error ?? 'error');
+            setIsSubmitting(false);
+            return;
+          }
+          if (payload?.path && payload?.missionStubs) {
+            const ok = storePendingRequest({
+              ritualId,
+              intention: intentionToSend,
+              days: finalDays,
+              locale,
+              category: payload?.category,
+            });
+            if (ok && typeof window !== 'undefined') {
+              try {
+                const toStore = { ...payload, debugTrace: data?.debugTrace };
+                window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(toStore));
+              } catch {
+                /* ignore */
+              }
+            }
+            setLastSubmitDebug({
+              branch: 'proceed',
+              gateStatus: gate.status,
+              reason_code: actionabilityResult.reason_code,
+              categoryInferred: gate.category,
+              lifeGoalHit: false,
+              classifyVerdict: classifyData.verdict,
+              classifyReason: classifyData.reason_code,
+              classifyCategory: classifyData.category ?? undefined,
+            });
+            setIsSubmitting(false);
+            router.push(`/mission?creating=1&ritualId=${ritualId}`);
+            return;
+          }
+        }
+      }
+
       const intentionToSend = trimmed;
+      const softRealism = runSoftRealism(trimmed, finalDays, gate.category, locale);
+      if (softRealism.level === 'unrealistic' && softRealism.adjustments.length > 0) {
+        setLastSubmittedIntent(trimmed);
+        setRealismPending({
+          intentionToSend,
+          days: finalDays,
+          category: gate.category,
+          ritualId,
+          why_short: softRealism.why_short,
+          adjustments: softRealism.adjustments,
+          needsConfirmation: needsAmbitionConfirmation(trimmed),
+        });
+        setLastSubmitDebug({
+          branch: 'realism_pending',
+          gateStatus: gate.status,
+          reason_code: actionabilityResult.reason_code,
+          lifeGoalHit: false,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      if (softRealism.level === 'stretch' && softRealism.why_short) {
+        setStretchMessage(softRealism.why_short);
+      }
       const res = await fetch('/api/missions/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -273,6 +696,8 @@ export default function HomePage() {
           days: finalDays,
           locale,
           ritualId,
+          category: gate.category ?? undefined,
+          realism_acknowledged: false,
         }),
       });
       const data = await res.json();
@@ -286,6 +711,12 @@ export default function HomePage() {
             ? (t as { inlineClarifyHintSingleTerm?: string }).inlineClarifyHintSingleTerm ?? t.inlineClarifyHint
             : t.inlineClarifyHint;
         setInlineHint(hint);
+        setLastSubmitDebug({
+          branch: 'inline_hint',
+          gateStatus: gate.status,
+          reason_code: actionabilityResult.reason_code,
+          lifeGoalHit: false,
+        });
         setIsSubmitting(false);
         return;
       }
@@ -293,6 +724,12 @@ export default function HomePage() {
         setLastSubmittedIntent(trimmed);
         setInlineHint((t as { safetyInlineMessage?: string }).safetyInlineMessage ?? null);
         setInlineHintSecondary((t as { safetyInlineSecondary?: string }).safetyInlineSecondary ?? null);
+        setLastSubmitDebug({
+          branch: 'inline_hint',
+          gateStatus: gate.status,
+          reason_code: actionabilityResult.reason_code,
+          lifeGoalHit: false,
+        });
         setIsSubmitting(false);
         return;
       }
@@ -312,14 +749,22 @@ export default function HomePage() {
           intention: intentionToSend,
           days: finalDays,
           locale,
+          category: payload?.category,
         });
         if (ok && typeof window !== 'undefined') {
           try {
-            window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(payload));
+            const toStore = { ...payload, debugTrace: data?.debugTrace };
+            window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(toStore));
           } catch {
             /* ignore */
           }
         }
+        setLastSubmitDebug({
+          branch: 'proceed',
+          gateStatus: gate.status,
+          reason_code: actionabilityResult.reason_code,
+          lifeGoalHit: false,
+        });
         setIsSubmitting(false);
         router.push(`/mission?creating=1&ritualId=${ritualId}`);
         return;
@@ -344,17 +789,22 @@ export default function HomePage() {
           <div className={styles.section}>
             <div className={`${styles.card} ${styles.intentionCard}`}>
               <textarea
+                ref={intentionInputRef}
                 id="ritual-intention"
                 className={styles.intentionInput}
                 placeholder={placeholderText}
                 value={intention}
                 onChange={(event) => {
                   setIntention(event.target.value);
-                  if (event.target.value.trim()) {
-                    setInlineHint(null);
-                    setInlineHintSecondary(null);
-                    setSuggestedRephrase(null);
-                  }
+                  setInlineHint(null);
+                  setInlineHintSecondary(null);
+                  setSuggestedRephrase(null);
+                  setRealismPending(null);
+                  setShowConfirmationAdjustments(false);
+                  setAmbitionPending(null);
+                  setTwoPathPending(null);
+                  setStretchMessage(null);
+                  setLastSubmitDebug(null);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -364,29 +814,186 @@ export default function HomePage() {
                 }}
                 rows={3}
               />
-              {(inlineHint || inlineHintSecondary || suggestedRephrase) && (
+              {(inlineHint || inlineHintSecondary || suggestedRephrase || realismPending || stretchMessage || ambitionPending) && (
                 <>
-                  {inlineHint && (
-                    <p className={styles.inlineClarifyMessage}>{inlineHint}</p>
-                  )}
-                  {inlineHintSecondary && (
-                    <p className={styles.inlineClarifyMessageSecondary}>{inlineHintSecondary}</p>
-                  )}
-                  {suggestedRephrase && (
-                    <p className={styles.inlineClarifyMessageSecondary}>
-                      {(t as { actionabilitySuggestionLabel?: string }).actionabilitySuggestionLabel ?? 'Suggestion: '}
-                      <button
-                        type="button"
-                        className={styles.suggestedRephraseButton}
-                        onClick={() => {
-                          setIntention(suggestedRephrase);
-                          setSuggestedRephrase(null);
-                          setInlineHint(null);
-                        }}
-                      >
-                        {suggestedRephrase}
-                      </button>
-                    </p>
+                  {ambitionPending ? (
+                    <div className={styles.ambitionBlock}>
+                      <h3 className={styles.ambitionTitle}>
+                        {(t as { ambitionConfirmTitle?: string }).ambitionConfirmTitle ?? "C'est très ambitieux !"}
+                      </h3>
+                      <p className={styles.ambitionBody}>
+                        {(t as { ambitionConfirmBody?: string }).ambitionConfirmBody ?? "On peut essayer de construire un rituel à partir de ça. Tu confirmes ?"}
+                      </p>
+                      <div className={styles.ambitionActions}>
+                        <button
+                          type="button"
+                          className={styles.ambitionPrimary}
+                          onClick={() => {
+                            proceedToMission({
+                              intentionToSend: ambitionPending.intent,
+                              days: ambitionPending.days,
+                              ritualId: ambitionPending.ritualId,
+                              category: undefined,
+                              realismAck: false,
+                            });
+                            setAmbitionPending(null);
+                          }}
+                          disabled={isSubmitting}
+                        >
+                          {(t as { ambitionConfirmYes?: string }).ambitionConfirmYes ?? 'Oui, je confirme'}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.ambitionSecondary}
+                          onClick={() => {
+                            setAmbitionPending(null);
+                            setInlineHint((t as { ambitionRefineHint?: string }).ambitionRefineHint ?? null);
+                            setInlineHintSecondary(null);
+                            setSuggestedRephrase(null);
+                            intentionInputRef.current?.focus();
+                          }}
+                          disabled={isSubmitting}
+                        >
+                          {(t as { ambitionConfirmRefine?: string }).ambitionConfirmRefine ?? 'Je préfère préciser'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : realismPending ? (
+                    <div className={styles.realismBlock}>
+                      {realismPending.needsConfirmation && !showConfirmationAdjustments ? (
+                        <div className={styles.realismConfirmBlock}>
+                          <h3 className={styles.realismConfirmTitle}>
+                            {(t as { realismConfirmTitle?: string }).realismConfirmTitle ?? "C'est très ambitieux comme défi !"}
+                          </h3>
+                          <p className={styles.realismConfirmBody}>
+                            {String((t as { realismConfirmBody?: string }).realismConfirmBody ?? '').replace('{days}', String(realismPending.days))}
+                          </p>
+                          <p className={styles.realismConfirmQuestion}>
+                            {(t as { realismConfirmQuestion?: string }).realismConfirmQuestion ?? 'Tu confirmes vouloir te lancer ?'}
+                          </p>
+                          <div className={styles.realismConfirmActions}>
+                            <button
+                              type="button"
+                              className={styles.realismConfirmPrimary}
+                              onClick={() =>
+                                proceedToMission({
+                                  intentionToSend: realismPending.intentionToSend,
+                                  days: realismPending.days,
+                                  category: realismPending.category,
+                                  ritualId: realismPending.ritualId,
+                                  realismAck: true,
+                                })
+                              }
+                              disabled={isSubmitting}
+                            >
+                              {(t as { realismConfirmYes?: string }).realismConfirmYes ?? 'Oui, je confirme'}
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.realismConfirmSecondary}
+                              onClick={() => setShowConfirmationAdjustments(true)}
+                              disabled={isSubmitting}
+                            >
+                              {(t as { realismConfirmAdjust?: string }).realismConfirmAdjust ?? 'Je préfère ajuster'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {!realismPending.needsConfirmation ? (
+                            <p className={styles.inlineClarifyMessage}>
+                              {(t as { realismInlineMessage?: string }).realismInlineMessage
+                                ? String((t as { realismInlineMessage }).realismInlineMessage).replace('{days}', String(realismPending.days))
+                                : isFrench
+                                  ? `Ça risque d'être trop ambitieux en ${realismPending.days} jours.`
+                                  : `This might be too ambitious for ${realismPending.days} days.`}
+                              {realismPending.why_short ? ` ${realismPending.why_short}` : ''}
+                            </p>
+                          ) : null}
+                          <div className={styles.realismActions}>
+                            <button
+                              type="button"
+                              className={realismPending.needsConfirmation && showConfirmationAdjustments ? styles.realismConfirmSecondary : styles.realismKeepButton}
+                              onClick={() =>
+                                proceedToMission({
+                                  intentionToSend: realismPending.intentionToSend,
+                                  days: realismPending.days,
+                                  category: realismPending.category,
+                                  ritualId: realismPending.ritualId,
+                                  realismAck: true,
+                                })
+                              }
+                              disabled={isSubmitting}
+                            >
+                              {(t as { realismKeepAnyway?: string }).realismKeepAnyway ?? (isFrench ? 'Garder quand même' : 'Keep anyway')}
+                            </button>
+                            {(!realismPending.needsConfirmation || showConfirmationAdjustments) && (
+                              <>
+                                <span className={styles.realismOr}>
+                                  {(t as { realismOr?: string }).realismOr ?? (isFrench ? 'ou' : 'or')}
+                                </span>
+                                <div className={styles.realismAdjustOptions}>
+                                  {realismPending.adjustments.slice(0, 3).map((adj, idx) => {
+                                    const intention =
+                                      adj.type === 'reduce_scope'
+                                        ? adj.next_intent
+                                        : (adj.next_intent ?? realismPending.intentionToSend);
+                                    const days =
+                                      adj.type === 'increase_duration' ? adj.next_days : realismPending.days;
+                                    return (
+                                      <button
+                                        key={`${adj.type}-${idx}`}
+                                        type="button"
+                                        className={styles.realismAdjustButton}
+                                        onClick={() =>
+                                          proceedToMission({
+                                            intentionToSend: intention,
+                                            days,
+                                            category: realismPending.category,
+                                            ritualId: realismPending.ritualId,
+                                            realismAck: true,
+                                          })
+                                        }
+                                        disabled={isSubmitting}
+                                      >
+                                        {adj.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ) : stretchMessage ? (
+                    <p className={styles.realismStretchMessage}>{stretchMessage}</p>
+                  ) : (
+                    <>
+                      {inlineHint && (
+                        <p className={styles.inlineClarifyMessage}>{inlineHint}</p>
+                      )}
+                      {inlineHintSecondary && (
+                        <p className={styles.inlineClarifyMessageSecondary}>{inlineHintSecondary}</p>
+                      )}
+                      {suggestedRephrase && (
+                        <p className={styles.inlineClarifyMessageSecondary}>
+                          {(t as { actionabilitySuggestionLabel?: string }).actionabilitySuggestionLabel ?? 'Suggestion: '}
+                          <button
+                            type="button"
+                            className={styles.suggestedRephraseButton}
+                            onClick={() => {
+                              setIntention(suggestedRephrase);
+                              setSuggestedRephrase(null);
+                              setInlineHint(null);
+                            }}
+                          >
+                            {suggestedRephrase}
+                          </button>
+                        </p>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -504,6 +1111,8 @@ export default function HomePage() {
           {showDevTools && (
             <>
               {' · '}
+              <a href="/admin/rules">Admin rules</a>
+              {' · '}
               <button
                 type="button"
                 className={styles.mockUiToggle}
@@ -515,6 +1124,22 @@ export default function HomePage() {
             </>
           )}
         </div>
+        {showDevTools && lastSubmitDebug && (
+          <div className={styles.homeDebug} aria-live="polite">
+            <div className={styles.homeDebugTitle}>Home branch (dev)</div>
+            <pre className={styles.homeDebugPre}>
+              {[
+                `branch=${lastSubmitDebug.branch}`,
+                lastSubmitDebug.gateStatus != null && `gate=${lastSubmitDebug.gateStatus} (${lastSubmitDebug.reason_code ?? '—'})`,
+                lastSubmitDebug.categoryInferred != null && `categoryInferred=${lastSubmitDebug.categoryInferred}`,
+                lastSubmitDebug.lifeGoalHit != null && `lifeGoal=${lastSubmitDebug.lifeGoalHit}${lastSubmitDebug.lifeGoalMarker ? ` marker=${lastSubmitDebug.lifeGoalMarker}` : ''}`,
+                lastSubmitDebug.classifyVerdict != null && `classify=${lastSubmitDebug.classifyVerdict}${lastSubmitDebug.classifyReason ? ` reason=${lastSubmitDebug.classifyReason}` : ''}${lastSubmitDebug.classifyCategory ? ` category=${lastSubmitDebug.classifyCategory}` : ''}`,
+              ]
+                .filter(Boolean)
+                .join('\n')}
+            </pre>
+          </div>
+        )}
         </div>
         </section>
       </Container>

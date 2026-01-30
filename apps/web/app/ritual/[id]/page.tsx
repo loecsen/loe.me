@@ -194,6 +194,10 @@ export default function RitualPage() {
       setRecord(parsed);
       setAdjustGoal(parsed.intention);
       setAdjustDays(String(parsed.days));
+      const traceFromRecord = (parsed.debugMeta as { debugTrace?: TraceEvent[] } | undefined)?.debugTrace;
+      if (traceFromRecord && Array.isArray(traceFromRecord)) {
+        setDebugTrace(traceFromRecord);
+      }
       if (isCreating) {
         router.replace(`/ritual/${ritualId}`);
       }

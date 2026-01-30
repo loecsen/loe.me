@@ -27,6 +27,7 @@ import { runActionabilityV2 } from '../../../lib/actionability';
 import { runSafetyGate } from '../../../lib/safety/safetyGate';
 import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
 import { runRealismGate } from '../../../lib/realism/realismGate';
+import { categoryRequiresFeasibility } from '../../../lib/category';
 
 export const runtime = 'nodejs';
 
@@ -348,13 +349,15 @@ const validatePayload = (payload: RawPayload) => {
 
 export async function POST(request: Request) {
   try {
-    const { intention, days, locale, clarification, ritualId: requestedRitualId, normalized_intent } =
+    const { intention, days, locale, clarification, ritualId: requestedRitualId, normalized_intent, category: requestCategory, realism_acknowledged } =
       (await request.json()) as {
       intention?: string;
       days?: number;
       locale?: string;
       ritualId?: string;
       normalized_intent?: string;
+      category?: string;
+      realism_acknowledged?: boolean;
       clarification?: {
         originalIntention: string;
         chosenLabel: string;
@@ -363,6 +366,11 @@ export async function POST(request: Request) {
         createdAt: string;
       };
     };
+
+    const category =
+      typeof requestCategory === 'string' && ['LEARN', 'CREATE', 'PERFORM', 'WELLBEING', 'SOCIAL', 'CHALLENGE'].includes(requestCategory)
+        ? requestCategory
+        : undefined;
 
     const safeDays = typeof days === 'number' && Number.isFinite(days) ? Math.max(days, 7) : 21;
     const levelsCount = safeDays <= 14 ? 2 : safeDays <= 30 ? 3 : 4;
@@ -403,6 +411,7 @@ export async function POST(request: Request) {
     const trace: TraceEvent[] | undefined = debugEnabled ? [] : undefined;
 
     const actionabilityResult = runActionabilityV2(rawIntention, safeDays);
+    const resolvedCategory = category ?? actionabilityResult.category;
     if (debugEnabled && trace) {
       const status =
         actionabilityResult.action === 'actionable'
@@ -416,6 +425,14 @@ export async function POST(request: Request) {
         reason_code: actionabilityResult.reason_code,
         meta: { actionability_v2: actionabilityResult.debug },
       });
+      if (resolvedCategory) {
+        pushTrace(trace, {
+          gate: 'category_gate',
+          outcome: 'ok',
+          reason_code: undefined,
+          meta: { category: resolvedCategory },
+        });
+      }
     }
     if (actionabilityResult.action !== 'actionable') {
       return NextResponse.json({
@@ -477,31 +494,41 @@ export async function POST(request: Request) {
 
     const safeIntention = safeText(gate.cleanIntention ?? rawIntention, 'Apprendre avec constance');
 
-    const realismGate = runRealismGate(
-      safeIntention,
-      typeof days === 'number' && Number.isFinite(days) ? days : undefined,
-      resolvedLocale,
-    );
-    if (realismGate.status === 'needs_reformulation') {
+    const runRealismForCategory = resolvedCategory != null ? categoryRequiresFeasibility(resolvedCategory as import('../../../lib/category').Category) : true;
+    if (runRealismForCategory && !realism_acknowledged) {
+      const realismGate = runRealismGate(
+        safeIntention,
+        typeof days === 'number' && Number.isFinite(days) ? days : undefined,
+        resolvedLocale,
+      );
+      if (realismGate.status === 'needs_reformulation') {
+        pushTrace(trace, {
+          gate: 'realism_gate',
+          outcome: 'needs_clarification',
+          reason_code: 'unrealistic',
+          meta: { choices: realismGate.choices.map((choice) => choice.label_key) },
+        });
+        return NextResponse.json({
+          data: {
+            needsClarification: true,
+            clarification: { mode: 'inline', reason_code: 'unrealistic' },
+            debug: {},
+          },
+          ...(debugEnabled ? { debugTrace: trace } : {}),
+        });
+      }
       pushTrace(trace, {
         gate: 'realism_gate',
-        outcome: 'needs_clarification',
-        reason_code: 'unrealistic',
-        meta: { choices: realismGate.choices.map((choice) => choice.label_key) },
+        outcome: 'ok',
       });
-      return NextResponse.json({
-        data: {
-          needsClarification: true,
-          clarification: { mode: 'inline', reason_code: 'unrealistic' },
-          debug: {},
-        },
-        ...(debugEnabled ? { debugTrace: trace } : {}),
+    } else if (runRealismForCategory && realism_acknowledged && debugEnabled && trace) {
+      pushTrace(trace, {
+        gate: 'realism_gate_v2_soft',
+        outcome: 'acknowledged',
+        reason_code: undefined,
+        meta: { category: resolvedCategory },
       });
     }
-    pushTrace(trace, {
-      gate: 'realism_gate',
-      outcome: 'ok',
-    });
 
     if (!apiKey) {
       if (process.env.NODE_ENV !== 'production') {
@@ -961,6 +988,7 @@ export async function POST(request: Request) {
       path,
       missionStubs: missionStubsWithSteps,
       missions: [firstMissionFull],
+      category: resolvedCategory ?? undefined,
       debugMeta: {
         domainId,
         domainPlaybookVersion,

@@ -199,6 +199,186 @@
   color: #5a3fd4;
 }
 
+.realismBlock {
+  display: grid;
+  gap: 10px;
+}
+
+.realismConfirmBlock {
+  display: grid;
+  gap: 12px;
+}
+
+.realismConfirmTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #141428;
+  margin: 0;
+}
+
+.realismConfirmBody {
+  font-size: 14px;
+  color: rgba(20, 20, 40, 0.75);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.realismConfirmQuestion {
+  font-size: 14px;
+  font-weight: 500;
+  color: #141428;
+  margin: 0;
+}
+
+.realismConfirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.realismConfirmPrimary {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: #7b56ff;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.realismConfirmPrimary:hover:not(:disabled) {
+  background: #6a45e6;
+}
+
+.realismConfirmSecondary {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(20, 20, 40, 0.25);
+  background: transparent;
+  color: #141428;
+  cursor: pointer;
+}
+
+.realismConfirmSecondary:hover:not(:disabled) {
+  background: rgba(20, 20, 40, 0.06);
+}
+
+.ambitionBlock {
+  display: grid;
+  gap: 12px;
+}
+
+.ambitionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #141428;
+  margin: 0;
+}
+
+.ambitionBody {
+  font-size: 14px;
+  color: rgba(20, 20, 40, 0.75);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ambitionActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ambitionPrimary {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: #7b56ff;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.ambitionPrimary:hover:not(:disabled) {
+  background: #6a45e6;
+}
+
+.ambitionSecondary {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(20, 20, 40, 0.25);
+  background: transparent;
+  color: #141428;
+  cursor: pointer;
+}
+
+.ambitionSecondary:hover:not(:disabled) {
+  background: rgba(20, 20, 40, 0.06);
+}
+
+.realismStretchMessage {
+  font-size: 13px;
+  color: rgba(20, 20, 40, 0.6);
+  margin: 0;
+}
+
+.realismActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.realismKeepButton {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #7b56ff;
+  background: transparent;
+  color: #7b56ff;
+  cursor: pointer;
+}
+
+.realismKeepButton:hover:not(:disabled) {
+  background: rgba(123, 86, 255, 0.08);
+}
+
+.realismOr {
+  font-size: 13px;
+  color: rgba(20, 20, 40, 0.5);
+}
+
+.realismAdjustOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.realismAdjustButton {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(20, 20, 40, 0.2);
+  background: #f7f7f8;
+  color: #141428;
+  cursor: pointer;
+}
+
+.realismAdjustButton:hover:not(:disabled) {
+  background: rgba(20, 20, 40, 0.06);
+}
+
 .daysHero {
   display: flex;
   align-items: baseline;
@@ -373,6 +553,30 @@
 .mockUiToggle:focus-visible {
   outline: 2px solid var(--loe-color-focus-ring);
   outline-offset: 2px;
+}
+
+.homeDebug {
+  margin-top: var(--loe-space-md);
+  padding: var(--loe-space-sm);
+  border-radius: var(--loe-radius-sm);
+  border: 1px solid var(--loe-color-border);
+  background: var(--loe-color-surface);
+  font-size: var(--loe-font-size-xs);
+}
+
+.homeDebugTitle {
+  font-weight: 600;
+  color: var(--loe-color-text);
+  margin-bottom: 6px;
+}
+
+.homeDebugPre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--loe-color-muted);
 }
 
 /* Form et cartes (intention + jours) à 660px de contenu dès qu’il y a la place */

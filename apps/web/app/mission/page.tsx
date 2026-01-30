@@ -41,6 +41,7 @@ type PendingRequest = {
   intention: string;
   days: number;
   locale?: string;
+  category?: string;
   clarification?: RitualRecord['clarification'];
 };
 
@@ -49,6 +50,8 @@ type MissionsResponse = {
   needsClarification?: boolean;
   clarification?: { mode?: string; reason_code?: string };
   reason_code?: string;
+  category?: string;
+  debugTrace?: TraceEvent[];
   path: LearningPath & {
     domainId?: string;
     domainProfile?: string;
@@ -208,6 +211,7 @@ export default function MissionPage() {
           intention: pending.intention.trim(),
           days: pending.days,
           status: 'ready',
+          category: data.category ?? pending.category,
           createdAt: now,
           updatedAt: now,
           clarification: pending.clarification,
@@ -237,7 +241,11 @@ export default function MissionPage() {
           pathSource: data.path,
           missionStubsSource: data.missionStubs,
           missionsByIdSource,
-          debugMeta: data.debugMeta,
+          debugMeta: data.debugMeta
+            ? { ...data.debugMeta, debugTrace: data.debugTrace }
+            : data.debugTrace
+              ? { debugTrace: data.debugTrace }
+              : undefined,
         };
         const rawIndex = window.localStorage.getItem(RITUAL_INDEX_KEY);
         const list = rawIndex ? (JSON.parse(rawIndex) as RitualIndexItem[]) : [];
@@ -246,6 +254,7 @@ export default function MissionPage() {
           intention: record.intention,
           days: record.days,
           status: record.status,
+          category: record.category,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
           clarification: record.clarification,

@@ -1,10 +1,19 @@
 export type RitualStatus = 'generating' | 'ready' | 'error' | 'completed';
 
+export type RitualCategory =
+  | 'LEARN'
+  | 'CREATE'
+  | 'PERFORM'
+  | 'WELLBEING'
+  | 'SOCIAL'
+  | 'CHALLENGE';
+
 export type RitualIndexItem = {
   ritualId: string;
   intention: string;
   days: number;
   status: RitualStatus;
+  category?: RitualCategory;
   createdAt: string;
   updatedAt: string;
   lastViewedAt?: string;
@@ -44,6 +53,7 @@ export type RitualIndexItem = {
     qualityWarnings?: string[];
     zodIssues?: unknown;
     axisMapped?: Array<{ from: string; to: string }>;
+    debugTrace?: unknown[];
   };
 };
 
