@@ -3,14 +3,17 @@
  * Règles UI pragmatiques (docs/ui-blueprint.md)
  * - style={{ }} interdit dans packages/ui sauf ligne précédente avec "ui-blueprint" ou objet réduit à une var CSS (--*)
  * - couleurs hex/rgba/hsl interdites dans .css hors :root et hors commentaires
+ * - si modif actionability/realism/confirmation/classifier, le diff doit inclure registry (lib/rules)
  * Usage: node scripts/lint-ui-rules.mjs
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uiRoot = path.join(__dirname, '..', 'packages', 'ui', 'src');
+const repoRoot = path.join(__dirname, '..');
+const uiRoot = path.join(repoRoot, 'packages', 'ui', 'src');
 
 const errors = [];
 
@@ -113,6 +116,38 @@ walkAll(appRoot, '.ts', (file) => {
     errors.push(`Mock leak detected: ${relative} imports PourLaMaquette. Only Home provider may import mocks.`);
   }
 });
+
+// Rules registry coherence: if staged files touch rule logic, registry or entries must be touched too
+const RULE_LOGIC_PATHS = [
+  'apps/web/app/lib/actionability.ts',
+  'apps/web/app/lib/actionability/realism.ts',
+  'apps/web/app/lib/actionability/ambitionConfirmation.ts',
+  'apps/web/app/lib/prompts/actionabilityClassifier.ts',
+];
+const REGISTRY_PATHS = [
+  'apps/web/app/lib/rules/registry.ts',
+  'apps/web/app/lib/rules/entries/',
+];
+function getStagedFiles() {
+  try {
+    return execSync('git diff --name-only --cached', { encoding: 'utf-8', cwd: repoRoot })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+const staged = getStagedFiles();
+const touchesRuleLogic = RULE_LOGIC_PATHS.some((p) => staged.some((f) => f === p || f.startsWith(p + '/')));
+const touchesRegistry =
+  staged.some((f) => f === REGISTRY_PATHS[0]) ||
+  staged.some((f) => f.startsWith(REGISTRY_PATHS[1]));
+if (touchesRuleLogic && !touchesRegistry) {
+  errors.push(
+    'Rules registry: if you modify actionability.ts, realism.ts, ambitionConfirmation.ts or actionabilityClassifier, also update apps/web/app/lib/rules/registry.ts or lib/rules/entries/*.ts',
+  );
+}
 
 if (errors.length > 0) {
   console.error('Règles UI (docs/ui-blueprint.md) + anti-leak mock non respectées:\n');

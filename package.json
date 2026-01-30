@@ -10,7 +10,13 @@
     "lint:ui-rules": "node scripts/lint-ui-rules.mjs",
     "format": "prettier . --check",
     "format:write": "prettier . --write",
-    "purge:data": "node scripts/purge-data.mjs"
+    "purge:data": "node scripts/purge-data.mjs",
+    "smoke:realism": "node scripts/smoke-realism.mjs",
+    "smoke:ambition": "node scripts/smoke-ambition-confirmation.mjs",
+    "smoke:rules": "node scripts/smoke-rules-registry.mjs",
+    "smoke:home-classify": "node scripts/smoke-home-classify-feasibility.mjs",
+    "smoke:taxonomy": "node scripts/smoke-taxonomy.mjs",
+    "smoke:playbooks": "node scripts/smoke-playbooks.mjs"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
