@@ -16,7 +16,8 @@
     "smoke:rules": "node scripts/smoke-rules-registry.mjs",
     "smoke:home-classify": "node scripts/smoke-home-classify-feasibility.mjs",
     "smoke:taxonomy": "node scripts/smoke-taxonomy.mjs",
-    "smoke:playbooks": "node scripts/smoke-playbooks.mjs"
+    "smoke:playbooks": "node scripts/smoke-playbooks.mjs",
+    "smoke:sanity": "npm run lint && npm run smoke:taxonomy && npm run smoke:playbooks && npm run smoke:realism && npm run smoke:ambition && npm run smoke:rules && npm run smoke:home-classify"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
