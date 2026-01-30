@@ -5,8 +5,10 @@ import {
   parseClassifierResponse,
 } from '../../../lib/prompts/actionabilityClassifier';
 import type { DisplayLang } from '../../../lib/actionability';
-import { shouldSuggestRephraseSync, buildSuggestionFromTemplate } from '../../../lib/actionability/suggestion';
+import { shouldSuggestRephraseSync, isSafeRephrase } from '../../../lib/actionability/suggestion';
 import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
+import { runSoftRealism } from '../../../lib/actionability/realism';
+import { categoryRequiresFeasibility } from '../../../lib/category';
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const CLASSIFIER_TIMEOUT_MS = 8_000;
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
     body = (await request.json()) as { intent?: string; timeframe_days?: number; display_lang?: string };
   } catch {
     return NextResponse.json(
-      { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'classifier_error', normalized_intent: '', suggested_rephrase: null, confidence: 0 },
+      { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'classifier_error', normalized_intent: '', suggested_rephrase: null, confidence: 0, category: null },
       { status: 400 },
     );
   }
@@ -38,18 +40,19 @@ export async function POST(request: Request) {
 
   if (!intent) {
     return NextResponse.json(
-      { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'too_vague', normalized_intent: '', suggested_rephrase: null, confidence: 0 },
+      { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'too_vague', normalized_intent: '', suggested_rephrase: null, confidence: 0, category: null },
       { status: 400 },
     );
   }
 
   if (!shouldSuggestRephraseSync(intent)) {
     return NextResponse.json({
-      verdict: 'NEEDS_REPHRASE_INLINE',
+      verdict: 'BLOCKED',
       reason_code: 'safety_no_suggestion',
       normalized_intent: '',
       suggested_rephrase: null,
       confidence: 0,
+      category: null,
     });
   }
 
@@ -57,11 +60,12 @@ export async function POST(request: Request) {
   const safetyVerdict = guard(intent);
   if (safetyVerdict.status === 'blocked') {
     return NextResponse.json({
-      verdict: 'NEEDS_REPHRASE_INLINE',
-      reason_code: 'safety_no_suggestion',
+      verdict: 'BLOCKED',
+      reason_code: 'blocked',
       normalized_intent: '',
       suggested_rephrase: null,
       confidence: 0,
+      category: null,
     });
   }
 
@@ -75,6 +79,7 @@ export async function POST(request: Request) {
       normalized_intent: intent,
       suggested_rephrase: null,
       confidence: 0,
+      category: null,
     });
   }
 
@@ -112,6 +117,7 @@ export async function POST(request: Request) {
         normalized_intent: intent,
         suggested_rephrase: null,
         confidence: 0,
+        category: null,
       });
     }
 
@@ -124,6 +130,7 @@ export async function POST(request: Request) {
         normalized_intent: intent,
         suggested_rephrase: null,
         confidence: 0,
+        category: null,
       });
     }
 
@@ -135,13 +142,61 @@ export async function POST(request: Request) {
         normalized_intent: intent,
         suggested_rephrase: null,
         confidence: 0,
+        category: null,
       });
     }
 
-    const suggested_rephrase = buildSuggestionFromTemplate(displayLang, parsed.normalized_intent);
+    const normalizedGuard = guard(parsed.normalized_intent);
+    if (normalizedGuard.status === 'blocked') {
+      return NextResponse.json({
+        verdict: 'BLOCKED',
+        reason_code: 'blocked',
+        normalized_intent: '',
+        suggested_rephrase: null,
+        confidence: 0,
+        category: parsed.category,
+      });
+    }
+
+    const rephraseGuard =
+      parsed.suggested_rephrase != null && parsed.suggested_rephrase.trim() !== ''
+        ? guard(parsed.suggested_rephrase)
+        : { status: 'ok' as const };
+    if (rephraseGuard.status === 'blocked') {
+      return NextResponse.json({
+        ...parsed,
+        suggested_rephrase: null,
+        reason_code: 'safety_no_suggestion',
+      });
+    }
+
+    const suggested_rephrase =
+      parsed.suggested_rephrase != null && parsed.suggested_rephrase.trim() !== '' && isSafeRephrase(parsed.suggested_rephrase)
+        ? parsed.suggested_rephrase.trim()
+        : null;
+
+    const intentForRealism = (parsed.normalized_intent ?? intent).trim();
+    const timeframe = typeof timeframe_days === 'number' && Number.isFinite(timeframe_days) ? timeframe_days : 14;
+    const realism =
+      parsed.verdict === 'ACTIONABLE' && categoryRequiresFeasibility(parsed.category as import('../../../lib/category').Category)
+        ? runSoftRealism(intentForRealism, timeframe, parsed.category, displayLang)
+        : { level: 'ok' as const, adjustments: [] };
+
+    const reasonCode =
+      suggested_rephrase === null &&
+      parsed.suggested_rephrase != null &&
+      parsed.suggested_rephrase.trim() !== ''
+        ? ('safety_no_suggestion' as const)
+        : parsed.reason_code;
+
     return NextResponse.json({
       ...parsed,
-      suggested_rephrase: suggested_rephrase ?? parsed.suggested_rephrase,
+      reason_code: reasonCode,
+      suggested_rephrase,
+      category: parsed.category,
+      realism: realism.level,
+      realism_why_short: realism.why_short,
+      realism_adjustments: realism.adjustments,
     });
   } catch (err) {
     clearTimeout(timeoutId);
@@ -154,6 +209,7 @@ export async function POST(request: Request) {
       normalized_intent: intent,
       suggested_rephrase: null,
       confidence: 0,
+      category: null,
     });
   }
 }

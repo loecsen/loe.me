@@ -3,11 +3,15 @@
  * Utilisé UNIQUEMENT en fallback quand le rule-based retourne BORDERLINE.
  */
 
+export const CATEGORIES = ['LEARN', 'CREATE', 'PERFORM', 'WELLBEING', 'SOCIAL', 'CHALLENGE'] as const;
+export type ClassifierCategory = (typeof CATEGORIES)[number];
+
 export const ACTIONABILITY_CLASSIFIER_SYSTEM = `You are a strict classifier for whether a short user intent can be turned into a concrete, day-by-day micro-ritual plan.
 Return ONLY valid JSON matching this schema:
 {
   "verdict": "ACTIONABLE" | "NEEDS_REPHRASE_INLINE",
   "reason_code": "too_vague" | "social_chitchat" | "pure_noun_topic" | "no_action_or_outcome" | "ambiguous_goal" | "ok",
+  "category": "LEARN" | "CREATE" | "PERFORM" | "WELLBEING" | "SOCIAL" | "CHALLENGE",
   "normalized_intent": string,
   "suggested_rephrase": string | null,
   "confidence": number
@@ -15,14 +19,15 @@ Return ONLY valid JSON matching this schema:
 Rules:
 - ACTIONABLE means a ritual can be generated without follow-up questions because there is at least an action OR a clear goal/outcome.
 - NEEDS_REPHRASE_INLINE means purely social, not a ritual request, or too vague.
+- category: LEARN (learn & understand), CREATE (create & express), PERFORM (progress & perform), WELLBEING (change & ground), SOCIAL (social & collective), CHALLENGE (challenges & transformations). Pick the best fit.
+- normalized_intent: light cleanup, same language as intent, no translation.
+- suggested_rephrase: when verdict is NEEDS_REPHRASE_INLINE, provide a natural rephrase in the SAME language as the user intent. One short sentence with an action (learn/do/improve). Do NOT add "in 14 days" or timeframe unless the user specified it. If no good rephrase, set null.
 - Multilingual: short CJK/Korean can still be actionable (e.g., "피자 만들기", "学习中文A2").
-- normalized_intent: light cleanup, same language as intent, no translation. We will build the suggestion from it.
-- suggested_rephrase: ignored (we build it from normalized_intent and display_lang). You may set null.
 Heuristics:
-- Pure greetings/chitchat → NEEDS_REPHRASE_INLINE.
+- Pure greetings/chitchat → NEEDS_REPHRASE_INLINE, category SOCIAL.
 - Single noun/topic without action/outcome → NEEDS_REPHRASE_INLINE.
 - Doing/making/practicing/learning/improving + object → ACTIONABLE.
-- Consume/enjoy only ("eat pizza") without learning/skill/outcome → prefer NEEDS_REPHRASE_INLINE.
+- Consume/enjoy only ("eat pizza") without learning/skill/outcome → prefer NEEDS_REPHRASE_INLINE with suggested_rephrase like "learn to make pizza" or "practice cooking pizza" in intent language.
 - If timeframe_days present and intent is a skill/learning goal → prefer ACTIONABLE.`;
 
 export function buildActionabilityClassifierUser(
@@ -41,17 +46,20 @@ export function buildActionabilityClassifierUser(
 }
 
 export type ClassifierVerdict = 'ACTIONABLE' | 'NEEDS_REPHRASE_INLINE';
+/** LLM-only codes; API may also return safety_no_suggestion when suggestion is filtered. */
 export type ClassifierReasonCode =
   | 'too_vague'
   | 'social_chitchat'
   | 'pure_noun_topic'
   | 'no_action_or_outcome'
   | 'ambiguous_goal'
-  | 'ok';
+  | 'ok'
+  | 'safety_no_suggestion';
 
 export type ActionabilityClassifierResponse = {
   verdict: ClassifierVerdict;
   reason_code: ClassifierReasonCode;
+  category: ClassifierCategory;
   normalized_intent: string;
   suggested_rephrase: string | null;
   confidence: number;
@@ -70,6 +78,10 @@ function isValidReasonCode(s: string): s is ClassifierReasonCode {
   return (REASON_CODES as string[]).includes(s);
 }
 
+function isValidCategory(s: string): s is ClassifierCategory {
+  return (CATEGORIES as readonly string[]).includes(s);
+}
+
 /**
  * Parse la réponse JSON du LLM. Retourne null si invalide.
  */
@@ -79,11 +91,15 @@ export function parseClassifierResponse(raw: string): ActionabilityClassifierRes
     const parsed = JSON.parse(stripped) as Record<string, unknown>;
     const verdict = parsed.verdict;
     const reason_code = parsed.reason_code;
+    const category = parsed.category;
     if (verdict !== 'ACTIONABLE' && verdict !== 'NEEDS_REPHRASE_INLINE') return null;
     if (typeof reason_code !== 'string' || !isValidReasonCode(reason_code)) return null;
+    const resolvedCategory =
+      typeof category === 'string' && isValidCategory(category) ? category : 'LEARN';
     return {
       verdict,
       reason_code,
+      category: resolvedCategory,
       normalized_intent: typeof parsed.normalized_intent === 'string' ? parsed.normalized_intent : '',
       suggested_rephrase:
         parsed.suggested_rephrase == null ? null : String(parsed.suggested_rephrase),

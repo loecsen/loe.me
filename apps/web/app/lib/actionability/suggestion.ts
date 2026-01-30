@@ -89,6 +89,20 @@ export function shouldSuggestRephraseSync(intent: string): boolean {
   return true;
 }
 
+/**
+ * Post-filter: true if text is safe to show as suggested_rephrase (no sexual/insult).
+ * Used after LLM returns suggested_rephrase.
+ */
+export function isSafeRephrase(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return true;
+  const normalized = normalizedForBlock(t);
+  for (const sub of BLOCKED_SUBSTRINGS) {
+    if (normalized.includes(sub)) return false;
+  }
+  return true;
+}
+
 /** Suggestion template: "Exemple : '{intent} en 14 jours'" etc. No techniques/positions. */
 const SUGGESTION_TEMPLATES: Record<DisplayLang, string> = {
   en: "Example: '{intent} in 14 days'",

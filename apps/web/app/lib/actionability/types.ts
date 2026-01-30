@@ -22,7 +22,8 @@ export type ActionabilityReasonCode =
   | 'ok'
   | 'actionable'
   | 'classifier_error'
-  | 'safety_no_suggestion';
+  | 'safety_no_suggestion'
+  | 'blocked';
 
 export type ActionabilityGateResult = {
   status: ActionabilityStatus;
@@ -30,9 +31,11 @@ export type ActionabilityGateResult = {
   mode: 'inline';
   normalized_intent?: string;
   suggested_rephrase?: string | null;
+  category?: string;
   debug?: {
     dominant_script?: string;
     ratios?: Record<string, number>;
     features?: Record<string, unknown>;
+    category?: string;
   };
 };

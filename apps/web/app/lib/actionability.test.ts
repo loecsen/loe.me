@@ -3,8 +3,8 @@
  * Run with: npx ts-node --esm apps/web/app/lib/actionability.test.ts (if ts-node available)
  * Or run via vitest if added to the project.
  */
-import { runActionabilityV2, getDisplayLanguage } from './actionability';
-import { shouldSuggestRephraseSync, buildSuggestionFromTemplate } from './actionability/suggestion';
+import { runActionabilityV2, getDisplayLanguage, Category } from './actionability';
+import { shouldSuggestRephraseSync, buildSuggestionFromTemplate, isSafeRephrase } from './actionability/suggestion';
 
 function assertAction(
   text: string,
@@ -20,6 +20,26 @@ function assertAction(
   }
 }
 
+function assertActionWithCategory(
+  text: string,
+  expectedAction: 'actionable' | 'not_actionable_inline' | 'borderline',
+  expectedCategory: string | undefined,
+  label?: string,
+  timeframe?: number,
+) {
+  const result = runActionabilityV2(text, timeframe);
+  if (result.action !== expectedAction) {
+    throw new Error(
+      `[${label ?? text}] Expected action "${expectedAction}", got "${result.action}"`,
+    );
+  }
+  if (expectedCategory !== undefined && result.category !== expectedCategory) {
+    throw new Error(
+      `[${label ?? text}] Expected category "${expectedCategory}", got "${result.category}"`,
+    );
+  }
+}
+
 // "pizza" => not_actionable_inline (single term)
 assertAction('pizza', 'not_actionable_inline', 'pizza');
 
@@ -29,8 +49,8 @@ assertAction('faire pizza', 'actionable', 'faire pizza');
 // "manger pizza" => BORDERLINE (consume only)
 assertAction('manger pizza', 'borderline', 'manger pizza');
 
-// "apprendre le chinois A2 90 jours" => ACTIONABLE (has_cefr or has_digit)
-assertAction('apprendre le chinois A2 90 jours', 'actionable', 'chinois A2 90 jours');
+// "apprendre le chinois A2 90 jours" => ACTIONABLE, category LEARN
+assertActionWithCategory('apprendre le chinois A2 90 jours', 'actionable', Category.LEARN, 'chinois A2 90 jours');
 
 // "apprendre le chinois A2" + 90 days => ACTIONABLE
 assertAction('apprendre le chinois A2', 'actionable', 'apprendre chinois A2 + 90d', 90);
@@ -38,8 +58,8 @@ assertAction('apprendre le chinois A2', 'actionable', 'apprendre chinois A2 + 90
 // "你好" => not_actionable_inline (social/greeting)
 assertAction('你好', 'not_actionable_inline', '你好');
 
-// "学习中文A2 90天" => actionable (has digit / CEFR)
-assertAction('学习中文A2 90天', 'actionable', '学习中文A2 90天');
+// "学习中文A2 90天" => actionable, category LEARN (has digit / CEFR)
+assertActionWithCategory('学习中文A2 90天', 'actionable', Category.LEARN, '学习中文A2 90天');
 
 // "피자" => not_actionable_inline
 assertAction('피자', 'not_actionable_inline', '피자');
@@ -65,8 +85,11 @@ function assertShouldSuggest(intent: string, expected: boolean, label?: string) 
   }
 }
 
-// "petite bite" -> no suggestion (rejection message only)
+// "petite bite" -> BLOCKED / no suggestion (toxic; must not suggest "Learn about … techniques")
 assertShouldSuggest('petite bite', false, 'petite bite');
+if (isSafeRephrase('petite bite')) {
+  throw new Error('isSafeRephrase("petite bite") must be false');
+}
 
 // "pizza" -> may suggest (FR if UI=fr) -> we only test shouldSuggest true; displayLang tested separately
 assertShouldSuggest('pizza', true, 'pizza');
