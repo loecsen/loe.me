@@ -7,7 +7,7 @@
   display: grid;
   gap: 0;
   cursor: pointer;
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  transition: box-shadow 200ms ease;
   min-width: 0;
   width: 100%;
   box-shadow: var(--loe-shadow-card);
@@ -15,8 +15,7 @@
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--loe-shadow-card-hover);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .card:focus-visible {
@@ -39,6 +38,11 @@
   height: 100%;
   max-width: 100%;
   object-fit: cover;
+  transition: transform 300ms ease;
+}
+
+.card:hover .thumbImage {
+  transform: scale(1.06);
 }
 
 .levelPill {

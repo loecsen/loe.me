@@ -35,7 +35,7 @@ export function validateLearningPath(payload: unknown): ValidationResult<Learnin
 
   const errors: string[] = [];
   normalized.levels.forEach((level) => {
-    if (level.steps.length > 5) {
+    if (level.steps.length > 7) {
       errors.push(`Level ${level.id} has too many steps (${level.steps.length}).`);
     }
   });

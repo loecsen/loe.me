@@ -19,11 +19,23 @@ type I18nProviderProps = {
   children: React.ReactNode;
 };
 
+async function loadFrOverrides(): Promise<Record<string, string>> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const res = await fetch('/api/admin/messages-overrides');
+    const data = (await res.json()) as { fr?: Record<string, string> };
+    return data.fr ?? {};
+  } catch {
+    return {};
+  }
+}
+
 export function I18nProvider({ initialLocale, acceptLanguage, children }: I18nProviderProps) {
   const [storedLocale, setStoredLocale] = useLocalStorage<Locale | null>('loe.locale', null);
   const [locale, setLocaleState] = useState<Locale>(
     initialLocale ?? getLocaleFromAcceptLanguage(acceptLanguage ?? null),
   );
+  const [frOverrides, setFrOverrides] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (storedLocale) {
@@ -36,15 +48,23 @@ export function I18nProvider({ initialLocale, acceptLanguage, children }: I18nPr
     }
   }, [storedLocale]);
 
+  useEffect(() => {
+    if (locale !== 'fr') return;
+    loadFrOverrides().then(setFrOverrides);
+  }, [locale]);
+
   const setLocale = (next: Locale) => {
     setLocaleState(next);
     setStoredLocale(next);
   };
 
-  const t = useMemo(
-    () => (translations[locale] ?? translations[defaultLocale]) as Copy,
-    [locale],
-  );
+  const t = useMemo(() => {
+    const base = (translations[locale] ?? translations[defaultLocale]) as Copy;
+    if (locale === 'fr' && Object.keys(frOverrides).length > 0) {
+      return { ...base, ...frOverrides } as Copy;
+    }
+    return base;
+  }, [locale, frOverrides]);
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>

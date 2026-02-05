@@ -1,4 +1,5 @@
 import type { DomainPlaybook } from './registry';
+import type OpenAI from 'openai';
 
 const DOMAIN_KEYWORDS: Record<string, string[]> = {
   language: [
@@ -163,7 +164,7 @@ export function inferDomainId(intention: string): string {
 type InferDomainOptions = {
   playbooks: DomainPlaybook[];
   locale?: string;
-  llm?: { apiKey: string; model: string };
+  llm?: { client: OpenAI; model: string };
   hints?: EnrichedIntention;
 };
 
@@ -182,56 +183,46 @@ export async function inferDomainContext(
   let domainId = fallback.id;
   let source: 'heuristic' | 'llm' | 'fallback' = hintedDomain ? hints?.source ?? 'heuristic' : 'heuristic';
 
-  if (llm?.apiKey && (hintedDomain === null || domainId === 'personal_productivity')) {
+  if (llm?.client && (hintedDomain === null || domainId === 'personal_productivity')) {
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${llm.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: llm.model,
-          temperature: 0,
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'domain_classifier',
-              strict: true,
-              schema: {
-                type: 'object',
-                properties: {
-                  domainId: { type: 'string', enum: domainIds },
-                },
-                required: ['domainId'],
-                additionalProperties: false,
+      const response = await llm.client.chat.completions.create({
+        model: llm.model,
+        temperature: 0,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'domain_classifier',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                domainId: { type: 'string', enum: domainIds },
               },
+              required: ['domainId'],
+              additionalProperties: false,
             },
           },
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are a strict classifier. Return JSON only with the chosen domainId.',
-            },
-            {
-              role: 'user',
-              content: `Goal: "${intention}". Locale: ${locale}. DomainIds: ${domainIds.join(
-                ', ',
-              )}`,
-            },
-          ],
-        }),
+        },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a strict classifier. Return JSON only with the chosen domainId.',
+          },
+          {
+            role: 'user',
+            content: `Goal: "${intention}". Locale: ${locale}. DomainIds: ${domainIds.join(
+              ', ',
+            )}`,
+          },
+        ],
       });
-      if (response.ok) {
-        const payload = await response.json();
-        const content = payload?.choices?.[0]?.message?.content;
-        if (content) {
-          const parsed = JSON.parse(content) as { domainId?: string };
-          if (parsed.domainId && domainIds.includes(parsed.domainId)) {
-            domainId = parsed.domainId;
-            source = 'llm';
-          }
+      const content = response?.choices?.[0]?.message?.content;
+      if (content) {
+        const parsed = JSON.parse(content) as { domainId?: string };
+        if (parsed.domainId && domainIds.includes(parsed.domainId)) {
+          domainId = parsed.domainId;
+          source = 'llm';
         }
       }
     } catch {
@@ -278,7 +269,7 @@ const mapGoalHintToDomain = (goalHint: EnrichedIntention['goalHint']) => {
 export async function enrichIntention(
   intention: string,
   locale: string,
-  llm?: { apiKey: string; model: string },
+  llm?: { client: OpenAI; model: string },
 ): Promise<EnrichedIntention> {
   const text = intention.toLowerCase().trim();
   const hasLevel = languageLevelRegex.test(text);
@@ -360,86 +351,76 @@ export async function enrichIntention(
     return 'self_report';
   })();
 
-  if (llm?.apiKey && isVague) {
+  if (llm?.client && isVague) {
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${llm.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: llm.model,
-          temperature: 0,
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'intention_enricher',
-              strict: true,
-              schema: {
-                type: 'object',
-                properties: {
-                  goalHint: {
-                    type: 'string',
-                    enum: [
-                      'language_learning',
-                      'fitness_skill',
-                      'wellbeing_meditation',
-                      'coding_skill',
-                      'music_skill',
-                      'business_growth',
-                      'professional_skill',
-                      'academic_exam',
-                      'craft_cooking_diy',
-                      'personal_confidence',
-                      'personal_productivity',
-                    ],
-                  },
-                  contextHint: {
-                    type: 'string',
-                    enum: [
-                      'needs_level_timeframe',
-                      'needs_pronunciation_tones',
-                      'needs_sport_technique',
-                      'needs_daily_routine',
-                      'needs_workplace_scenario',
-                      'needs_exam_focus',
-                      'needs_creative_project',
-                      'needs_calm_breathing',
-                      'needs_cooking_steps',
-                      'needs_coding_project',
-                    ],
-                  },
-                  validationPreference: {
-                    type: 'string',
-                    enum: ['automatic', 'self_report', 'presence'],
-                  },
+      const response = await llm.client.chat.completions.create({
+        model: llm.model,
+        temperature: 0,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'intention_enricher',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                goalHint: {
+                  type: 'string',
+                  enum: [
+                    'language_learning',
+                    'fitness_skill',
+                    'wellbeing_meditation',
+                    'coding_skill',
+                    'music_skill',
+                    'business_growth',
+                    'professional_skill',
+                    'academic_exam',
+                    'craft_cooking_diy',
+                    'personal_confidence',
+                    'personal_productivity',
+                  ],
                 },
-                required: ['goalHint', 'contextHint', 'validationPreference'],
-                additionalProperties: false,
+                contextHint: {
+                  type: 'string',
+                  enum: [
+                    'needs_level_timeframe',
+                    'needs_pronunciation_tones',
+                    'needs_sport_technique',
+                    'needs_daily_routine',
+                    'needs_workplace_scenario',
+                    'needs_exam_focus',
+                    'needs_creative_project',
+                    'needs_calm_breathing',
+                    'needs_cooking_steps',
+                    'needs_coding_project',
+                  ],
+                },
+                validationPreference: {
+                  type: 'string',
+                  enum: ['automatic', 'self_report', 'presence'],
+                },
               },
+              required: ['goalHint', 'contextHint', 'validationPreference'],
+              additionalProperties: false,
             },
           },
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You enrich goals for a learning ritual. Return JSON only using enums.',
-            },
-            {
-              role: 'user',
-              content: `Goal: "${intention}". Locale: ${locale}.`,
-            },
-          ],
-        }),
+        },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You enrich goals for a learning ritual. Return JSON only using enums.',
+          },
+          {
+            role: 'user',
+            content: `Goal: "${intention}". Locale: ${locale}.`,
+          },
+        ],
       });
-      if (response.ok) {
-        const payload = await response.json();
-        const content = payload?.choices?.[0]?.message?.content;
-        if (content) {
-          const parsed = JSON.parse(content) as EnrichedIntention;
-          return { ...parsed, source: 'llm' };
-        }
+      const content = response?.choices?.[0]?.message?.content;
+      if (content) {
+        const parsed = JSON.parse(content) as EnrichedIntention;
+        return { ...parsed, source: 'llm' };
       }
     } catch {
       return { goalHint, contextHint, validationPreference, source: 'fallback' };

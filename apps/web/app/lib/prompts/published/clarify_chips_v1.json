@@ -1,0 +1,17 @@
+{
+  "name": "clarify_chips_v1",
+  "version": "1.0.0",
+  "purpose_en": "Generate a strict clarify-chips contract (context + comfort) for the inline refine UI.",
+  "token_budget_target": 220,
+  "safety_notes_en": "No medical/legal/sexual guidance; output only short localized labels. No disclaimers.",
+  "system": "You output ONLY valid JSON matching the required contract. Labels must be in the SAME language as the intent. Keys must be short ASCII slugs (a-z0-9_). Keep labels short. Do not include any markdown or HTML.",
+  "user_template": "Intent (redacted): \"{{intent}}\". Domain: {{domain}}. Intent language: {{intent_lang}}. UI locale: {{ui_locale}}. Days: {{days}}. Task: infer the best template_key (stable, slug-like). Build sections for context and comfort (type \"single\"). Each section has up to 4 options and a default key from its options. Provide short labels (<=32 chars) and option labels (<=26 chars). Output JSON ONLY with this shape: {\"template_key\": string, \"prompt_version\": \"clarify_chips_v1\", \"lang\": string, \"days\": number, \"sections\": [{\"id\":\"context\"|\"comfort\",\"label\": string,\"type\":\"single\",\"options\":[{\"key\": string,\"label\": string}],\"default\": string}]}",
+  "input_schema": { "intent": "string", "intent_lang": "string", "ui_locale": "string", "days": "number", "domain": "string" },
+  "output_schema": {
+    "template_key": "string",
+    "prompt_version": "string",
+    "lang": "string",
+    "days": "number",
+    "sections": "array"
+  }
+}

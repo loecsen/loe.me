@@ -1,16 +1,20 @@
 import { NextResponse } from 'next/server';
 import {
-  ACTIONABILITY_CLASSIFIER_SYSTEM,
+  getActionabilityClassifierSystem,
   buildActionabilityClassifierUser,
   parseClassifierResponse,
 } from '../../../lib/prompts/actionabilityClassifier';
 import type { DisplayLang } from '../../../lib/actionability';
+import { inferCategoryFromIntent } from '../../../lib/actionability';
 import { shouldSuggestRephraseSync, isSafeRephrase } from '../../../lib/actionability/suggestion';
 import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
 import { runSoftRealism } from '../../../lib/actionability/realism';
 import { categoryRequiresFeasibility } from '../../../lib/category';
+import { getLexiconForIntent } from '../../../lib/lexicon/registry';
+import { recordPromptUse } from '../../../lib/db/recordPromptUse';
+import { getSiteLlmClientForTier } from '../../../lib/llm/router';
+import { redactForLlm } from '../../../lib/privacy/redact';
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const CLASSIFIER_TIMEOUT_MS = 8_000;
 
 const DISPLAY_LANGS: DisplayLang[] = ['en', 'fr', 'es', 'de', 'it', 'zh', 'ja', 'ko', 'ru'];
@@ -22,9 +26,9 @@ function toDisplayLang(v: unknown, uiFallback: string): DisplayLang {
 }
 
 export async function POST(request: Request) {
-  let body: { intent?: string; timeframe_days?: number; display_lang?: string };
+  let body: { intent?: string; timeframe_days?: number; display_lang?: string; ui_locale?: string };
   try {
-    body = (await request.json()) as { intent?: string; timeframe_days?: number; display_lang?: string };
+    body = (await request.json()) as { intent?: string; timeframe_days?: number; display_lang?: string; ui_locale?: string };
   } catch {
     return NextResponse.json(
       { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'classifier_error', normalized_intent: '', suggested_rephrase: null, confidence: 0, category: null },
@@ -36,13 +40,32 @@ export async function POST(request: Request) {
   const timeframe_days = typeof body.timeframe_days === 'number' && Number.isFinite(body.timeframe_days)
     ? body.timeframe_days
     : undefined;
-  const displayLang = toDisplayLang(body.display_lang ?? '', 'en');
+  // display_lang = intentLang (inferred from intent + uiLocale). Do NOT force English; follow uiLocale when intent empty.
+  const ui_locale = typeof body.ui_locale === 'string' ? body.ui_locale.trim() || 'en' : 'en';
+  const displayLang = toDisplayLang(body.display_lang ?? '', ui_locale);
 
   if (!intent) {
     return NextResponse.json(
       { verdict: 'NEEDS_REPHRASE_INLINE', reason_code: 'too_vague', normalized_intent: '', suggested_rephrase: null, confidence: 0, category: null },
       { status: 400 },
     );
+  }
+
+  // Blocage confidentialité par défaut (désactiver avec LLM_PRIVACY_STRICT=0)
+  if (process.env.LLM_PRIVACY_STRICT !== '0') {
+    const redacted = redactForLlm(intent, { maxChars: 280 });
+    if (redacted.risk === 'high' || redacted.risk === 'medium') {
+      return NextResponse.json({
+        verdict: 'BLOCKED',
+        reason_code: 'privacy_blocked',
+        privacy_blocked: true,
+        error_key: 'privacyUserMessage',
+        normalized_intent: '',
+        suggested_rephrase: null,
+        confidence: 0,
+        category: null,
+      });
+    }
   }
 
   if (!shouldSuggestRephraseSync(intent)) {
@@ -55,6 +78,10 @@ export async function POST(request: Request) {
       category: null,
     });
   }
+
+  const isDev = process.env.NODE_ENV !== 'production';
+  const { pack, source: lexicon_source, packLang: lexicon_lang } = await getLexiconForIntent(intent, ui_locale, { allowDraft: isDev });
+  const lexiconTokens = pack?.tokens ?? null;
 
   const { guard } = await getLexiconGuard();
   const safetyVerdict = guard(intent);
@@ -69,60 +96,49 @@ export async function POST(request: Request) {
     });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-
-  if (!apiKey) {
-    return NextResponse.json({
-      verdict: 'NEEDS_REPHRASE_INLINE',
-      reason_code: 'classifier_error',
-      normalized_intent: intent,
-      suggested_rephrase: null,
-      confidence: 0,
-      category: null,
-    });
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CLASSIFIER_TIMEOUT_MS);
 
+  const systemPrompt = getActionabilityClassifierSystem();
+  const LLM_TIER = 'default' as const;
+  let llmMeta: { llm_provider: string; llm_model: string; llm_base_url: string; llm_source: string; llm_tier: string; latency_ms: number } | undefined;
   try {
-    const res = await fetch(OPENAI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: ACTIONABILITY_CLASSIFIER_SYSTEM },
-          { role: 'user', content: buildActionabilityClassifierUser(intent, timeframe_days, displayLang) },
-        ],
-        max_tokens: 256,
-        temperature: 0.1,
-      }),
-      signal: controller.signal,
+    await recordPromptUse({
+      prompt_name: 'actionability_classifier_v1',
+      version: '1',
+      purpose_en: 'Strict classifier for whether user intent can become a day-by-day micro-ritual plan.',
+      where_used: ['app/api/actionability/classify/route.ts'],
+      prompt_text: systemPrompt,
+      input_schema: { intent: 'string', timeframe_days: 'number', display_lang: 'string' },
+      output_schema: { verdict: 'string', reason_code: 'string', normalized_intent: 'string', category: 'string', suggested_rephrase: 'string' },
+      token_budget_target: 256,
+      safety_notes_en: 'No user intent in prompt seed; lexicon guard runs before LLM.',
     });
+    const siteClient = await getSiteLlmClientForTier('default');
+    const start = Date.now();
+    const completion = await siteClient.client.chat.completions.create({
+      model: siteClient.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: buildActionabilityClassifierUser(intent, timeframe_days, displayLang) },
+      ],
+      max_tokens: 256,
+      temperature: 0.1,
+    }, { signal: controller.signal });
     clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      const errText = await res.text();
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[actionability/classify] OpenAI error', res.status, errText.slice(0, 200));
-      }
-      return NextResponse.json({
-        verdict: 'NEEDS_REPHRASE_INLINE',
-        reason_code: 'classifier_error',
-        normalized_intent: intent,
-        suggested_rephrase: null,
-        confidence: 0,
-        category: null,
-      });
+    const latency_ms = Date.now() - start;
+    if (process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production') {
+      llmMeta = {
+        llm_provider: siteClient.provider,
+        llm_model: siteClient.model,
+        llm_base_url: siteClient.baseUrl ?? 'default',
+        llm_source: siteClient.source,
+        llm_tier: LLM_TIER,
+        latency_ms,
+      };
     }
 
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const content = data?.choices?.[0]?.message?.content?.trim();
+    const content = completion.choices?.[0]?.message?.content?.trim();
     if (!content) {
       return NextResponse.json({
         verdict: 'NEEDS_REPHRASE_INLINE',
@@ -189,14 +205,19 @@ export async function POST(request: Request) {
         ? ('safety_no_suggestion' as const)
         : parsed.reason_code;
 
+    const category = parsed.category ?? inferCategoryFromIntent(intent, lexiconTokens) ?? null;
+    const includeLexiconMeta = process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production';
+
     return NextResponse.json({
       ...parsed,
       reason_code: reasonCode,
       suggested_rephrase,
-      category: parsed.category,
+      category,
       realism: realism.level,
       realism_why_short: realism.why_short,
       realism_adjustments: realism.adjustments,
+      ...(includeLexiconMeta ? { lexicon_source, lexicon_lang } : {}),
+      ...(llmMeta ? { llm_provider: llmMeta.llm_provider, llm_model: llmMeta.llm_model, llm_base_url: llmMeta.llm_base_url, llm_source: llmMeta.llm_source, llm_tier: llmMeta.llm_tier, latency_ms: llmMeta.latency_ms } : {}),
     });
   } catch (err) {
     clearTimeout(timeoutId);

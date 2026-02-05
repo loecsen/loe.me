@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "npm run dev --workspace apps/web",
+    "dev": "cd apps/web && npm run dev",
+    "dev:clean": "cd apps/web && npm run dev:clean",
     "build": "npm run build --workspace apps/web",
     "start": "npm run start --workspace apps/web",
     "lint": "npm run lint --workspace apps/web",
@@ -17,7 +18,22 @@
     "smoke:home-classify": "node scripts/smoke-home-classify-feasibility.mjs",
     "smoke:taxonomy": "node scripts/smoke-taxonomy.mjs",
     "smoke:playbooks": "node scripts/smoke-playbooks.mjs",
-    "smoke:sanity": "npm run lint && npm run smoke:taxonomy && npm run smoke:playbooks && npm run smoke:realism && npm run smoke:ambition && npm run smoke:rules && npm run smoke:home-classify"
+    "smoke:lexicon": "node scripts/smoke-lexicon.mjs",
+    "smoke:db": "node scripts/smoke-db.mjs",
+    "smoke:prompts": "node scripts/smoke-prompts.mjs",
+    "smoke:decision-engine": "node scripts/smoke-decision-engine.mjs",
+    "smoke:decision-engine-selection": "node scripts/smoke-decision-engine-selection.mjs",
+    "smoke:audience-safety": "node scripts/smoke-audience-safety.mjs",
+    "smoke:tone": "node scripts/smoke-tone.mjs",
+    "smoke:copy-variant": "node scripts/smoke-copy-variant.mjs",
+    "smoke:eval": "node scripts/smoke-eval.mjs",
+    "smoke:fingerprint": "node scripts/smoke-fingerprint.mjs",
+    "smoke:idea-routines": "node scripts/smoke-idea-routines.mjs",
+    "smoke:community-rituals": "node scripts/smoke-community-rituals.mjs",
+    "smoke:llm-config": "node scripts/smoke-llm-config.mjs",
+    "smoke:llm-router": "node scripts/smoke-llm-router.mjs",
+    "smoke:privacy-redact": "node scripts/smoke-privacy-redact.mjs",
+    "smoke:sanity": "npm run lint && npm run smoke:taxonomy && npm run smoke:playbooks && npm run smoke:realism && npm run smoke:ambition && npm run smoke:rules && npm run smoke:home-classify && npm run smoke:lexicon && npm run smoke:db && npm run smoke:prompts && npm run smoke:decision-engine && npm run smoke:decision-engine-selection && npm run smoke:audience-safety && npm run smoke:tone && npm run smoke:copy-variant && npm run smoke:fingerprint && npm run smoke:idea-routines && npm run smoke:community-rituals && npm run smoke:eval"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

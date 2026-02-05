@@ -90,3 +90,85 @@
      grid-template-columns: 1fr;
    }
  }
+
+/* Inspiration tab — horizontal category tabs, one category at a time */
+.inspirationCategoryTabs {
+  margin-bottom: var(--loe-space-sm);
+}
+
+/* Wrapper for tab content: fade out when changing category */
+.inspirationContentWrap {
+  min-height: 80px;
+  transition: opacity 220ms ease-out;
+}
+
+.inspirationContentWrap.inspirationContentLeaving {
+  opacity: 0;
+}
+
+/* Inner content: fade in + slide up when new category is shown */
+.inspirationContentInner {
+  transition: opacity 280ms ease-out, transform 280ms ease-out;
+}
+
+.inspirationContentInner.inspirationContentEntering {
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.inspirationSection {
+  display: grid;
+  gap: var(--loe-space-sm);
+}
+
+.inspirationCategoryTitle {
+  font-size: var(--loe-font-size-sm);
+  font-weight: var(--loe-font-weight-semibold);
+  color: var(--loe-color-text-secondary);
+  margin: 0 0 var(--loe-space-xs) 0;
+}
+
+.inspirationFallback {
+  margin-top: var(--loe-space-xl);
+  padding-top: var(--loe-space-lg);
+  border-top: 1px solid var(--loe-color-border-light);
+  display: grid;
+  gap: var(--loe-space-sm);
+  text-align: center;
+}
+
+.inspirationFallbackTitle {
+  font-size: var(--loe-font-size-base);
+  font-weight: var(--loe-font-weight-semibold);
+  color: var(--loe-color-text-secondary);
+  margin: 0;
+}
+
+.inspirationFallbackSubtitle {
+  font-size: var(--loe-font-size-sm);
+  color: var(--loe-color-muted-light);
+  margin: 0;
+}
+
+.inspirationChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--loe-space-sm);
+  justify-content: center;
+}
+
+.inspirationChip {
+  padding: var(--loe-space-sm) var(--loe-space-md);
+  border-radius: var(--loe-radius-pill);
+  background: var(--loe-color-surface-muted);
+  border: 1px solid var(--loe-color-border);
+  color: var(--loe-color-text);
+  font-size: var(--loe-font-size-sm);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.inspirationChip:hover {
+  background: var(--loe-color-surface);
+  border-color: var(--loe-color-border-light);
+}

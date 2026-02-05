@@ -1,7 +1,28 @@
 /**
- * Contrat unique du gate actionability (rule-based + LLM fallback).
- * mode est toujours "inline" (pas de page / redirect).
+ * Actionability and controllability contracts.
+ * mode is always "inline" (no dedicated page / redirect).
  */
+
+/** Controllability gate: outcome depends on user vs external. */
+export type ControllabilityLevel = 'high' | 'medium' | 'low';
+
+export type ControllabilityReasonCode =
+  | 'depends_on_other_people'
+  | 'depends_on_institution'
+  | 'depends_on_random_outcome'
+  | 'life_goal_elite_role'
+  | 'romantic_outcome'
+  | 'approval_or_selection'
+  | 'health_outcome_external'
+  | 'money_market_outcome'
+  | 'unknown';
+
+export interface ControllabilityResult {
+  level: ControllabilityLevel;
+  reason_code: ControllabilityReasonCode;
+  confidence: number;
+  meta?: Record<string, unknown>;
+}
 
 export type ActionabilityStatus =
   | 'BLOCKED'

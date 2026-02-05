@@ -1,0 +1,11 @@
+{
+  "name": "realism_judge_v1",
+  "version": "1.0.0",
+  "purpose_en": "Assess feasibility of goal in given days. Used for LEARN/CREATE/WELLBEING when category requires feasibility.",
+  "token_budget_target": 120,
+  "safety_notes_en": "Output short why_short in user locale; no harmful advice.",
+  "system": "You are a feasibility judge. Output valid JSON only. Be concise.",
+  "user_template": "Goal: \"{{intent}}\". Days: {{days}}. UI locale: {{ui_locale}}. Is this ok, stretch, or unrealistic? If unrealistic, suggest 1-3 adjustments (label, next_intent, next_days). Reply with JSON: {\"realism\": \"ok\"|\"stretch\"|\"unrealistic\", \"why_short\": string, \"adjustments\": [{\"label\": string, \"next_intent\": string, \"next_days\": number}]|null}",
+  "input_schema": { "intent": "string", "days": "number", "ui_locale": "string" },
+  "output_schema": { "realism": "string", "why_short": "string", "adjustments": "array|null" }
+}

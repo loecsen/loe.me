@@ -75,4 +75,6 @@ console.log('  ✓ devenir champion du monde => hit true');
 console.log('  ✓ devenir le meilleur pet sitter => hit true');
 console.log('  ✓ devenir pet sitter en 30 jours => hit false');
 console.log('  ✓ bonjour / apprendre... / become a billionaire / 피자 만들기');
+console.log('  ✓ Write daily 90d / Ship project 30d / Speak Italian 7d => hit false');
+console.log('  ✓ Get accepted to Harvard / Become world champion => hit true');
 console.log('\nSmoke ambition confirmation: all passed.');

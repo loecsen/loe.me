@@ -1,0 +1,11 @@
+{
+  "name": "equivalence_judge_v1",
+  "version": "1.0.0",
+  "purpose_en": "Decide if two intents are the same request for cache reuse. Used when similarity score is in [0.70, 0.90].",
+  "token_budget_target": 80,
+  "safety_notes_en": "No user content in output; only boolean and reason.",
+  "system": "You are a judge. Output valid JSON only.",
+  "user_template": "Are these two user intents the same request? Intent A: {{intent_a}}. Intent B: {{intent_b}}. Reply with JSON: {\"same_request\": boolean, \"confidence\": 0-1, \"reason_en\": string}",
+  "input_schema": { "intent_a": "string", "intent_b": "string" },
+  "output_schema": { "same_request": "boolean", "confidence": "number", "reason_en": "string" }
+}

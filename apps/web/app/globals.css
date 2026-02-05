@@ -9,7 +9,7 @@
 
 body {
   margin: 0;
-  background: linear-gradient(to bottom, var(--loe-color-background) 0%, var(--loe-color-gradient-body-mid) 50%, var(--loe-color-gradient-body-end) 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #e8e8f7 50%, #cd82a0 100%);
   color: var(--loe-color-text);
   font-family: var(--loe-font-family);
   letter-spacing: var(--loe-letter-spacing);
@@ -181,6 +181,10 @@ a {
   padding: var(--loe-space-xxl) 0 calc(var(--loe-space-huge) + 120px);
   color: rgba(102, 102, 102, 1);
   border-image: none;
+}
+
+.app-main-mission {
+  padding: 0;
 }
 
 .app-main-home {
@@ -793,6 +797,16 @@ a {
 .mission-subtitle {
   margin: 0;
   color: var(--loe-color-muted);
+}
+
+.mission-audience-badge {
+  font-size: 12px;
+  color: rgba(20, 20, 40, 0.7);
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  background: rgba(120, 80, 40, 0.12);
+  border-radius: 6px;
+  border: 1px solid rgba(120, 80, 40, 0.25);
 }
 
 .mission-stats {
@@ -2087,4 +2101,66 @@ a {
   .home-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Preloader splash — affiché AVANT le reste de la page (premier paint) */
+#loe-splash.loe-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #020617 0%, #312e81 50%, #020617 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+  transition: opacity 0.5s ease-out;
+}
+#loe-splash.loe-splash-out {
+  opacity: 0;
+  pointer-events: none;
+}
+.loe-splash-glow1 {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(80px);
+}
+.loe-splash-glow2 {
+  position: absolute;
+  top: 33%;
+  left: 33%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.05) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(60px);
+}
+.loe-splash-slogan {
+  position: relative;
+  z-index: 10;
+  font-size: 2.5rem;
+  font-weight: 200;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #d8b4fe 0%, #93c5fd 50%, #d8b4fe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  opacity: 0;
+  animation: loe-splash-fadeIn 1s 0.5s forwards ease-out;
+}
+@keyframes loe-splash-fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 768px) {
+  .loe-splash-slogan { font-size: 1.5rem; }
 }

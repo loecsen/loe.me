@@ -5,6 +5,7 @@ import { runSafetyGate } from '../../../lib/safety/safetyGate';
 import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
 import type { TraceEvent } from '@loe/core';
 import { runSafetyV2, pushTrace } from '@loe/core';
+import { normalizeRitualPlan } from '../../../lib/rituals/normalizeRitualPlan';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +30,7 @@ const suggestionByLocale: Record<string, string> = {
 };
 
 function createMockProposal(intention: string, days: number, locale: string) {
-  const levels = days <= 14 ? 2 : days <= 30 ? 3 : 4;
+  const levels = Math.ceil(days / 7);
   const rhythm =
     locale === 'fr'
       ? days <= 14
@@ -101,6 +102,10 @@ export async function POST(request: Request) {
   const headerLocale = getLocaleFromAcceptLanguage(request.headers.get('accept-language'));
   const resolvedLocale = normalizeLocale(locale ?? headerLocale);
   const rawIntention = typeof intention === 'string' ? intention.trim() : '';
+  const safeDays =
+    typeof days === 'number' && Number.isFinite(days) ? Math.max(Math.floor(days), 7) : 21;
+  const totalSteps = safeDays;
+  const stepsPerLevel = 7;
 
   console.log('[rituals.generate] incoming', {
     intention: rawIntention,
@@ -182,9 +187,26 @@ export async function POST(request: Request) {
     });
   }
 
-  const proposal = createMockProposal(rawIntention, days, resolvedLocale);
+  const proposal = createMockProposal(rawIntention, safeDays, resolvedLocale);
+  const planNormalization = normalizeRitualPlan(
+    { levels: [], competencies: [{ id: 'comp-1' }] },
+    totalSteps,
+    { stepsPerLevel, locale: resolvedLocale },
+  );
+  if (planNormalization.meta.autofillCount > 0 && process.env.NODE_ENV !== 'production') {
+    console.warn(
+      `[rituals.generate] autofilled ${planNormalization.meta.autofillCount}/${totalSteps}`,
+      {
+        reason: 'missing_steps',
+        truncatedCount: planNormalization.meta.truncatedCount,
+      },
+    );
+  }
   return NextResponse.json({
-    data: proposal,
+    data: {
+      ...proposal,
+      plan: planNormalization.plan,
+    },
     ...(debugEnabled ? { debugTrace: trace } : {}),
   });
 }

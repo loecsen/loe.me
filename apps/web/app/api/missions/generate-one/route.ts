@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getLocaleFromAcceptLanguage, normalizeLocale } from '../../../lib/i18n';
 import type { LearningPathBlueprintV2, MissionBlueprintV2, PassCriteria } from '@loe/core';
+import { getSiteLlmClientForTier } from '../../../lib/llm/router';
 
 export const runtime = 'nodejs';
 
@@ -22,8 +23,6 @@ type Payload = {
   previousMissionSummary?: string;
   locale?: string;
 };
-
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 const safeText = (value: unknown, fallback: string) =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
@@ -133,40 +132,26 @@ export async function POST(request: Request) {
     }
   })();
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-  if (!apiKey) {
+  let siteClient: Awaited<ReturnType<typeof getSiteLlmClientForTier>>;
+  try {
+    siteClient = await getSiteLlmClientForTier('reasoning');
+  } catch {
     return NextResponse.json({ error: 'missing_api_key' }, { status: 500 });
   }
 
   const systemPrompt = buildSystemPrompt(languageName);
   const userPrompt = buildUserPrompt(safeGoal, path, missionStub, previousMissionSummary);
 
-  const response = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.5,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    }),
+  const response = await siteClient.client.chat.completions.create({
+    model: siteClient.model,
+    temperature: 0.5,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
   });
-
-  if (!response.ok) {
-    return NextResponse.json({ error: 'generation_failed' }, { status: 500 });
-  }
-
-  const payload = (await response.json()) as {
-    choices: Array<{ message: { content: string } }>;
-  };
-  const content = payload.choices?.[0]?.message?.content ?? '{}';
+  const content = response.choices?.[0]?.message?.content ?? '{}';
   let blocks: RawBlock[] = [];
   try {
     const parsed = JSON.parse(content) as { blocks?: RawBlock[] };

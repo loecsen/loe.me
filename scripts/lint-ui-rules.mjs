@@ -79,7 +79,10 @@ walk(uiRoot, '.css', (file) => {
 // Anti-fuite mock : seul apps/web/app/page.tsx peut importer PourLaMaquette
 const appRoot = path.join(__dirname, '..', 'apps', 'web', 'app');
 const mockDir = path.join(appRoot, 'PourLaMaquette');
-const allowedMockImporter = path.join(appRoot, 'page.tsx');
+const allowedMockImporters = [
+  path.join(appRoot, 'page.tsx'),
+  path.join(appRoot, 'lib', 'lexicon', 'registry.ts'), // path-only reference to PourLaMaquette/lexicon-drafts
+];
 
 function walkAll(dir, ext, fn) {
   if (!fs.existsSync(dir)) return;
@@ -92,7 +95,8 @@ function walkAll(dir, ext, fn) {
 }
 
 function isAllowedMockImporter(file) {
-  return path.normalize(file) === path.normalize(allowedMockImporter);
+  const normalized = path.normalize(file);
+  return allowedMockImporters.some((allowed) => path.normalize(allowed) === normalized);
 }
 
 function hasMockImport(content) {
@@ -117,12 +121,52 @@ walkAll(appRoot, '.ts', (file) => {
   }
 });
 
-// Rules registry coherence: if staged files touch rule logic, registry or entries must be touched too
+// No direct import of PourLaMaquette/db outside PourLaMaquette (only lib/db provider uses path)
+function hasDbImport(content) {
+  return /from\s+['"].*PourLaMaquette\/db|import\s+.*PourLaMaquette\/db/.test(content);
+}
+walkAll(appRoot, '.tsx', (file) => {
+  if (file.startsWith(mockDir + path.sep)) return;
+  const content = fs.readFileSync(file, 'utf-8');
+  if (hasDbImport(content)) {
+    const relative = path.relative(path.join(__dirname, '..'), file);
+    errors.push(`Direct import of PourLaMaquette/db forbidden: ${relative}. Use lib/db provider only.`);
+  }
+});
+walkAll(appRoot, '.ts', (file) => {
+  if (file.startsWith(mockDir + path.sep)) return;
+  const content = fs.readFileSync(file, 'utf-8');
+  if (hasDbImport(content)) {
+    const relative = path.relative(path.join(__dirname, '..'), file);
+    errors.push(`Direct import of PourLaMaquette/db forbidden: ${relative}. Use lib/db provider only.`);
+  }
+});
+
+// Rules registry coherence: if staged files touch rule logic or lexicon/classify/generate, registry or entries must be touched too
 const RULE_LOGIC_PATHS = [
   'apps/web/app/lib/actionability.ts',
   'apps/web/app/lib/actionability/realism.ts',
   'apps/web/app/lib/actionability/ambitionConfirmation.ts',
   'apps/web/app/lib/prompts/actionabilityClassifier.ts',
+];
+const LEXICON_OR_GATE_PATHS = [
+  'apps/web/app/lib/lexicon/',
+  'apps/web/app/api/lexicon/',
+  'apps/web/app/api/actionability/classify/',
+  'apps/web/app/api/missions/generate/',
+];
+const PROMPT_OR_LLM_PATHS = [
+  'apps/web/app/lib/prompts/',
+  'apps/web/app/api/actionability/',
+  'apps/web/app/api/controllability/',
+  'apps/web/app/api/lexicon/bootstrap/',
+];
+const DECISION_ENGINE_PATHS = [
+  'apps/web/app/lib/decisionEngine/',
+  'apps/web/app/api/judge/',
+  'apps/web/app/api/decision/',
+  'apps/web/app/lib/prompts/store',
+  'apps/web/app/admin/prompts/',
 ];
 const REGISTRY_PATHS = [
   'apps/web/app/lib/rules/registry.ts',
@@ -140,12 +184,33 @@ function getStagedFiles() {
 }
 const staged = getStagedFiles();
 const touchesRuleLogic = RULE_LOGIC_PATHS.some((p) => staged.some((f) => f === p || f.startsWith(p + '/')));
+const touchesLexiconOrGate =
+  LEXICON_OR_GATE_PATHS.some((p) => staged.some((f) => f === p || f.startsWith(p)));
+const touchesPromptOrLlm =
+  PROMPT_OR_LLM_PATHS.some((p) => staged.some((f) => f === p || f.startsWith(p)));
+const touchesDecisionEngine =
+  DECISION_ENGINE_PATHS.some((p) => staged.some((f) => f === p || f.startsWith(p)));
 const touchesRegistry =
   staged.some((f) => f === REGISTRY_PATHS[0]) ||
   staged.some((f) => f.startsWith(REGISTRY_PATHS[1]));
 if (touchesRuleLogic && !touchesRegistry) {
   errors.push(
     'Rules registry: if you modify actionability.ts, realism.ts, ambitionConfirmation.ts or actionabilityClassifier, also update apps/web/app/lib/rules/registry.ts or lib/rules/entries/*.ts',
+  );
+}
+if (touchesLexiconOrGate && !touchesRegistry) {
+  errors.push(
+    'Rules registry: if you modify lib/lexicon, api/lexicon, api/actionability/classify or api/missions/generate, also update apps/web/app/lib/rules/registry.ts or lib/rules/entries/*.ts',
+  );
+}
+if (touchesPromptOrLlm && !touchesRegistry) {
+  errors.push(
+    'Rules registry: if you modify lib/prompts or any api/* LLM route (actionability, controllability, lexicon/bootstrap), also update apps/web/app/lib/rules/registry.ts or lib/rules/entries/*.ts (or prompt catalog).',
+  );
+}
+if (touchesDecisionEngine && !touchesRegistry) {
+  errors.push(
+    'Rules registry: if you modify lib/decisionEngine, api/judge, api/decision, lib/prompts/store or admin/prompts, also update apps/web/app/lib/rules/registry.ts or lib/rules/entries/*.ts (decision_engine_v2, prompt_policy).',
   );
 }
 

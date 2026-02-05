@@ -3,13 +3,12 @@ import { getLocaleFromAcceptLanguage, normalizeLocale } from '../i18n';
 import type { DomainPlaybook } from '../domains/registry';
 import { buildMissionFullPrompt, MISSION_FULL_PROMPT_VERSION } from '../prompts/missionFullPrompt';
 import { sha256 } from '../storage/fsStore';
+import { getSiteLlmClientForTier } from '../llm/router';
 
 type RawBlock =
   | { type: 'text'; text: string }
   | { type: 'checklist'; items: string[] }
   | { type: 'quiz'; question: string; choices: string[]; correctIndex?: number };
-
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 const safeText = (value: unknown, fallback: string) =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
@@ -100,11 +99,7 @@ export async function generateMissionBlocks({
     }
   })();
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-  if (!apiKey) {
-    throw new Error('missing_api_key');
-  }
+  const siteClient = await getSiteLlmClientForTier('reasoning');
 
   const { system, user } = buildMissionFullPrompt({
     userGoal: goal,
@@ -121,33 +116,18 @@ export async function generateMissionBlocks({
   const promptHash = sha256(`${systemPrompt}\n\n${userPrompt}`);
 
   const startedAt = Date.now();
-  const response = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.5,
-      max_tokens: maxTokens,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    }),
+  const response = await siteClient.client.chat.completions.create({
+    model: siteClient.model,
+    temperature: 0.5,
+    max_tokens: maxTokens,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
   });
-
-  if (!response.ok) {
-    throw new Error('generation_failed');
-  }
   const latencyMs = Date.now() - startedAt;
-
-  const payload = (await response.json()) as {
-    choices: Array<{ message: { content: string } }>;
-  };
-  const content = payload.choices?.[0]?.message?.content ?? '{}';
+  const content = response.choices?.[0]?.message?.content ?? '{}';
   try {
     const parsed = JSON.parse(content) as { blocks?: RawBlock[] };
     return {

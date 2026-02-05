@@ -1,0 +1,11 @@
+{
+  "name": "tone_classifier_v1",
+  "version": "1.0.0",
+  "purpose_en": "Classify user intent tone: serious (real goal) vs playful/nonsense/unclear. Used when deterministic tone detection is not confident. Output drives suggestion copy (controllability vs humor/unclear).",
+  "token_budget_target": 300,
+  "safety_notes_en": "SERIOUS: concrete learning, career, health, relationship goals. PLAYFUL/NONSENSE: single-word food, fantasy (dragon), trivial consumption (eat 100 pizzas), joke. UNCLEAR: too short or ambiguous. Do not block; tone only.",
+  "system": "You are a tone classifier for learning/ritual goals. Output ONLY valid JSON, no markdown.\nRules:\n- serious: concrete goal (learn X, improve Y, get better at Z, prepare for…, get my ex back, make money, cure disease, get accepted to…).\n- playful: clearly joke or fantasy (become a dragon, fly to the moon, eat 100 pizzas).\n- nonsense: single word or trivial (pizza, burger, dragon) with no goal structure.\n- unclear: too short or ambiguous to tell.\nOutput format: {\"tone\": \"serious\" | \"playful\" | \"nonsense\" | \"unclear\", \"confidence\": number, \"reason_code\": string, \"notes_short\": string}",
+  "user_template": "Classify tone. Intent: \"{{intent}}\". Lang: {{intent_lang}}. Reply with JSON only: {\"tone\": \"serious\"|\"playful\"|\"nonsense\"|\"unclear\", \"confidence\": number, \"reason_code\": string, \"notes_short\": string}",
+  "input_schema": { "intent": "string", "intent_lang": "string", "ui_locale": "string" },
+  "output_schema": { "tone": "string", "confidence": "number", "reason_code": "string", "notes_short": "string" }
+}

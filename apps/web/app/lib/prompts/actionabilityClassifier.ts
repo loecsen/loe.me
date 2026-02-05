@@ -1,12 +1,15 @@
 /**
  * Prompt versionné pour le classifieur LLM actionability.
- * Utilisé UNIQUEMENT en fallback quand le rule-based retourne BORDERLINE.
+ * Single source: lib/prompts/published/actionability_classifier_v1.json (no duplicate).
+ * Fallback to constant when file missing.
  */
+
+import { getPrompt } from './store';
 
 export const CATEGORIES = ['LEARN', 'CREATE', 'PERFORM', 'WELLBEING', 'SOCIAL', 'CHALLENGE'] as const;
 export type ClassifierCategory = (typeof CATEGORIES)[number];
 
-export const ACTIONABILITY_CLASSIFIER_SYSTEM = `You are a strict classifier for whether a short user intent can be turned into a concrete, day-by-day micro-ritual plan.
+const ACTIONABILITY_CLASSIFIER_SYSTEM_FALLBACK = `You are a strict classifier for whether a short user intent can be turned into a concrete, day-by-day micro-ritual plan.
 Return ONLY valid JSON matching this schema:
 {
   "verdict": "ACTIONABLE" | "NEEDS_REPHRASE_INLINE",
@@ -20,9 +23,9 @@ Rules:
 - ACTIONABLE means a ritual can be generated without follow-up questions because there is at least an action OR a clear goal/outcome.
 - NEEDS_REPHRASE_INLINE means purely social, not a ritual request, or too vague.
 - category: LEARN (learn & understand), CREATE (create & express), PERFORM (progress & perform), WELLBEING (change & ground), SOCIAL (social & collective), CHALLENGE (challenges & transformations). Pick the best fit.
-- normalized_intent: light cleanup, same language as intent, no translation.
-- suggested_rephrase: when verdict is NEEDS_REPHRASE_INLINE, provide a natural rephrase in the SAME language as the user intent. One short sentence with an action (learn/do/improve). Do NOT add "in 14 days" or timeframe unless the user specified it. If no good rephrase, set null.
-- Multilingual: short CJK/Korean can still be actionable (e.g., "피자 만들기", "学习中文A2").
+- normalized_intent: light cleanup, MUST be in the SAME language as the user intent (intentLang). Do not translate to English.
+- suggested_rephrase: when verdict is NEEDS_REPHRASE_INLINE, provide a natural rephrase in the SAME language as the user intent (intentLang). One short sentence with an action (learn/do/improve). Do NOT add "in 14 days" or timeframe unless the user specified it. If no good rephrase, set null.
+- Multilingual: short CJK/Korean can still be actionable (e.g., "피자 만들기", "学习中文A2"). Output language must match input language.
 Heuristics:
 - Pure greetings/chitchat → NEEDS_REPHRASE_INLINE, category SOCIAL.
 - Single noun/topic without action/outcome → NEEDS_REPHRASE_INLINE.
@@ -30,17 +33,42 @@ Heuristics:
 - Consume/enjoy only ("eat pizza") without learning/skill/outcome → prefer NEEDS_REPHRASE_INLINE with suggested_rephrase like "learn to make pizza" or "practice cooking pizza" in intent language.
 - If timeframe_days present and intent is a skill/learning goal → prefer ACTIONABLE.`;
 
+/** System prompt: from published JSON or fallback. */
+export function getActionabilityClassifierSystem(): string {
+  const entry = getPrompt('actionability_classifier_v1', { allowDraft: true });
+  return entry?.system ?? ACTIONABILITY_CLASSIFIER_SYSTEM_FALLBACK;
+}
+
+function substituteTemplate(template: string, vars: Record<string, string>): string {
+  let out = template;
+  for (const [key, value] of Object.entries(vars)) {
+    out = out.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+  }
+  return out;
+}
+
 export function buildActionabilityClassifierUser(
   intent: string,
   timeframe_days?: number,
   display_lang?: string,
 ): string {
+  const entry = getPrompt('actionability_classifier_v1', { allowDraft: true });
+  const intentLangLine = display_lang
+    ? `intentLang / display_lang: ${display_lang} — output normalized_intent and suggested_rephrase in this language (same as user input). Do not translate to English.`
+    : '';
+  if (entry?.user_template) {
+    return substituteTemplate(entry.user_template, {
+      intent: intent.replace(/"/g, '\\"'),
+      timeframe_days: String(timeframe_days ?? 'null'),
+      intent_lang: intentLangLine,
+    });
+  }
   const parts = [
     `Intent: "${intent.replace(/"/g, '\\"')}"`,
     `timeframe_days: ${timeframe_days ?? 'null'}`,
   ];
   if (display_lang) {
-    parts.push(`display_lang: ${display_lang} (use this for output language consistency)`);
+    parts.push(`intentLang / display_lang: ${display_lang} — output normalized_intent and suggested_rephrase in this language (same as user input). Do not translate to English.`);
   }
   return parts.join('\n');
 }

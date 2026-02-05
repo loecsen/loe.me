@@ -24,10 +24,18 @@ import { buildPlanPrompt, PLAN_PROMPT_VERSION } from '../../../lib/prompts/planP
 import { sha256 } from '../../../lib/storage/fsStore';
 import { enrichIntention, inferDomainContext } from '../../../lib/domains/infer';
 import { runActionabilityV2 } from '../../../lib/actionability';
+import { assessAudienceSafety } from '../../../lib/actionability/audienceSafety';
+import type { AudienceSafetyLevel } from '../../../lib/actionability/audienceSafety';
 import { runSafetyGate } from '../../../lib/safety/safetyGate';
+import { getDecisionStore } from '../../../lib/db/provider';
+import { buildDecisionUniqueKey } from '../../../lib/db/key';
+import { isRecordFresh } from '../../../lib/db/freshness';
 import { getLexiconGuard } from '../../../lib/safety/getLexiconGuard';
+import { getLexiconForIntent } from '../../../lib/lexicon/registry';
 import { runRealismGate } from '../../../lib/realism/realismGate';
 import { categoryRequiresFeasibility } from '../../../lib/category';
+import { getSiteLlmClientForTier } from '../../../lib/llm/router';
+import { normalizeRitualPlan } from '../../../lib/rituals/normalizeRitualPlan';
 
 export const runtime = 'nodejs';
 
@@ -53,7 +61,13 @@ type RawPayload = {
   >;
 };
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+type GoalClarification = {
+  context: 'restaurant_classic' | 'bar_cafe' | 'takeaway';
+  comfort: 'essential' | 'comfortable' | 'fluent';
+  deadline_days: 7 | 14 | 30;
+  notes?: string;
+};
+
 const PLAN_WATERMARK = '[[WM_PLAN_V1]]';
 const FIRST_MISSION_WATERMARK = '[[WM_M1_V1]]';
 
@@ -93,6 +107,29 @@ const normalizeText = (value: string) =>
     .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+const normalizeGoalClarification = (input: unknown): GoalClarification | null => {
+  if (!input || typeof input !== 'object') return null;
+  const obj = input as Record<string, unknown>;
+  const context =
+    obj.context === 'restaurant_classic' || obj.context === 'bar_cafe' || obj.context === 'takeaway'
+      ? obj.context
+      : null;
+  const comfort =
+    obj.comfort === 'essential' || obj.comfort === 'comfortable' || obj.comfort === 'fluent'
+      ? obj.comfort
+      : null;
+  const deadline_days = obj.deadline_days === 7 || obj.deadline_days === 14 || obj.deadline_days === 30 ? obj.deadline_days : null;
+  if (!context || !comfort || !deadline_days) return null;
+  const notesRaw = typeof obj.notes === 'string' ? obj.notes : '';
+  const notes = notesRaw.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return {
+    context,
+    comfort,
+    deadline_days,
+    ...(notes ? { notes } : {}),
+  };
+};
 
 const DUPLICATION_ERRORS = new Set([
   'duplicate_summary',
@@ -170,6 +207,48 @@ const normalizeParsedPayload = (payload: RawPayload) => {
     }));
   }
   return { payload, axisMappings };
+};
+
+const normalizeMissionStubsToTotal = (
+  missionStubs: RawPayload['missionStubs'],
+  totalSteps: number,
+  stepsPerLevel: number,
+  locale: string,
+  competencyFallback: string,
+) => {
+  const stubs = Array.isArray(missionStubs) ? [...missionStubs] : [];
+  if (stubs.length === 0) {
+    return { stubs, autofillCount: 0, truncatedCount: 0 };
+  }
+  const safeTotalSteps = Math.max(1, Math.floor(totalSteps));
+  if (stubs.length > safeTotalSteps) {
+    return { stubs: stubs.slice(0, safeTotalSteps), autofillCount: 0, truncatedCount: stubs.length - safeTotalSteps };
+  }
+  const autofillCount = safeTotalSteps - stubs.length;
+  const isFr = locale.startsWith('fr');
+  const actionVerb = isFr ? 'Pratiquer' : 'Practice';
+  const titlePrefix = isFr ? 'Jour' : 'Day';
+  for (let i = stubs.length; i < safeTotalSteps; i += 1) {
+    const levelIndex = Math.floor(i / stepsPerLevel) + 1;
+    const stepIndex = (i % stepsPerLevel) + 1;
+    stubs.push({
+      id: `autofill-${i + 1}`,
+      title: `${titlePrefix} ${i + 1}`,
+      summary: `Auto-filled mission for day ${i + 1}.`,
+      uniqueAngle: 'Auto-filled mission',
+      actionVerb,
+      competencyId: competencyFallback,
+      axis: 'understand',
+      effortType: 'practice',
+      durationMin: 5,
+      dayIndex: i + 1,
+      order: i + 1,
+      levelIndex,
+      stepIndex,
+      is_autofill: true,
+    });
+  }
+  return { stubs, autofillCount, truncatedCount: 0 };
 };
 
 const buildIssueReport = (
@@ -349,7 +428,7 @@ const validatePayload = (payload: RawPayload) => {
 
 export async function POST(request: Request) {
   try {
-    const { intention, days, locale, clarification, ritualId: requestedRitualId, normalized_intent, category: requestCategory, realism_acknowledged } =
+    const { intention, days, locale, clarification, ritualId: requestedRitualId, normalized_intent, category: requestCategory, realism_acknowledged, goal_clarification } =
       (await request.json()) as {
       intention?: string;
       days?: number;
@@ -358,6 +437,7 @@ export async function POST(request: Request) {
       normalized_intent?: string;
       category?: string;
       realism_acknowledged?: boolean;
+      goal_clarification?: GoalClarification;
       clarification?: {
         originalIntention: string;
         chosenLabel: string;
@@ -372,8 +452,10 @@ export async function POST(request: Request) {
         ? requestCategory
         : undefined;
 
-    const safeDays = typeof days === 'number' && Number.isFinite(days) ? Math.max(days, 7) : 21;
-    const levelsCount = safeDays <= 14 ? 2 : safeDays <= 30 ? 3 : 4;
+    const safeDays =
+      typeof days === 'number' && Number.isFinite(days) ? Math.max(Math.floor(days), 7) : 21;
+    const totalSteps = safeDays;
+    const stepsPerLevel = 7;
     const headerLocale = getLocaleFromAcceptLanguage(request.headers.get('accept-language'));
     const resolvedLocale = normalizeLocale(locale ?? headerLocale);
     const rawLocale = locale ?? request.headers.get('accept-language') ?? resolvedLocale;
@@ -387,9 +469,6 @@ export async function POST(request: Request) {
         return 'English';
       }
     })();
-
-    const apiKey = process.env.OPENAI_API_KEY;
-    const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
     const rawIntention =
       (typeof normalized_intent === 'string' ? normalized_intent.trim() : null) ||
@@ -409,9 +488,44 @@ export async function POST(request: Request) {
 
     const debugEnabled = process.env.DEBUG === '1' || process.env.NODE_ENV !== 'production';
     const trace: TraceEvent[] | undefined = debugEnabled ? [] : undefined;
+    const goalClarification = normalizeGoalClarification(goal_clarification);
+    if (debugEnabled && goalClarification) {
+      const hasNotes = Boolean(goalClarification.notes);
+      console.log('[missions.generate] goal_clarification', {
+        context: goalClarification.context,
+        comfort: goalClarification.comfort,
+        deadline_days: goalClarification.deadline_days,
+        has_notes: hasNotes,
+      });
+      if (trace) {
+        pushTrace(trace, {
+          gate: 'goal_clarification',
+          outcome: 'applied',
+          meta: {
+            context: goalClarification.context,
+            comfort: goalClarification.comfort,
+            deadline_days: goalClarification.deadline_days,
+            has_notes: hasNotes,
+          },
+        });
+      }
+    }
 
-    const actionabilityResult = runActionabilityV2(rawIntention, safeDays);
+    const { pack: lexiconPack, source: lexiconPackSource, packLang } = await getLexiconForIntent(rawIntention, resolvedLocale, {
+      allowDraft: process.env.NODE_ENV !== 'production',
+    });
+    const lexiconTokens = lexiconPack?.tokens ?? null;
+
+    const actionabilityResult = runActionabilityV2(rawIntention, safeDays, lexiconTokens);
     const resolvedCategory = category ?? actionabilityResult.category;
+
+    if (debugEnabled && trace) {
+      pushTrace(trace, {
+        gate: 'lexicon_pack',
+        outcome: lexiconPackSource,
+        meta: { lang: packLang },
+      });
+    }
     if (debugEnabled && trace) {
       const status =
         actionabilityResult.action === 'actionable'
@@ -494,6 +608,74 @@ export async function POST(request: Request) {
 
     const safeIntention = safeText(gate.cleanIntention ?? rawIntention, 'Apprendre avec constance');
 
+    // Audience safety: DB lookup first, else classify + upsert. Blocked => no generation.
+    let audienceSafetyLevel: AudienceSafetyLevel = 'all_ages';
+    try {
+      const store = getDecisionStore();
+      const { unique_key, context_hash } = buildDecisionUniqueKey({
+        intent: rawIntention,
+        intent_lang: resolvedLocale,
+        category: null,
+        days: safeDays,
+        gate: 'audience_safety',
+        context_flags: { requires_feasibility: false },
+      });
+      const record = await store.getByUniqueKey(unique_key, context_hash);
+      if (record && isRecordFresh(record.updated_at, 'audience_safety', record.verdict)) {
+        audienceSafetyLevel = (record.gates?.audience_safety as AudienceSafetyLevel) ?? 'all_ages';
+      } else {
+        const baseUrl = typeof request.url === 'string' ? new URL(request.url).origin : '';
+        const result = await assessAudienceSafety(rawIntention, resolvedLocale, resolvedLocale, baseUrl
+          ? async (body) => {
+              const res = await fetch(`${baseUrl}/api/audience-safety/classify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              return res.json() as Promise<{ level: AudienceSafetyLevel; reason_code?: string; confidence?: number; notes_short?: string }>;
+            }
+          : undefined);
+        audienceSafetyLevel = result.level;
+        if (baseUrl && result) {
+          try {
+            await fetch(`${baseUrl}/api/db/decision/upsert-from-audience-safety`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                intent: rawIntention,
+                intent_lang: resolvedLocale,
+                ui_locale: resolvedLocale,
+                days: safeDays,
+                level: result.level,
+                reason_code: result.reason_code,
+                confidence: result.confidence,
+                notes_short: result.notes_short,
+              }),
+            });
+          } catch {
+            /* best-effort */
+          }
+        }
+      }
+      if (audienceSafetyLevel === 'blocked') {
+        if (debugEnabled) {
+          console.warn('[audience_safety] blocked', { intentionExcerpt: rawIntention.slice(0, 80) });
+        }
+        return NextResponse.json({
+          blocked: true,
+          block_reason: 'audience_safety',
+          clarification: { mode: 'inline', type: 'safety' },
+          debug: { audience_safety: 'blocked' },
+          ...(debugEnabled ? { debugTrace: trace } : {}),
+        });
+      }
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'production' && err instanceof Error) {
+        console.warn('[audience_safety]', err.message);
+      }
+      audienceSafetyLevel = 'all_ages';
+    }
+
     const runRealismForCategory = resolvedCategory != null ? categoryRequiresFeasibility(resolvedCategory as import('../../../lib/category').Category) : true;
     if (runRealismForCategory && !realism_acknowledged) {
       const realismGate = runRealismGate(
@@ -530,11 +712,14 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!apiKey) {
+    let siteClient: Awaited<ReturnType<typeof getSiteLlmClientForTier>>;
+    try {
+      siteClient = await getSiteLlmClientForTier('reasoning');
+    } catch (err) {
       if (process.env.NODE_ENV !== 'production') {
-        console.warn('[missions.generate] missing_api_key');
+        console.warn('[missions.generate] missing_api_key', err instanceof Error ? err.message : err);
         return NextResponse.json(
-          { error: 'missing_api_key', details: 'OPENAI_API_KEY is not set.' },
+          { error: 'missing_api_key', details: 'LLM API key is not set.' },
           { status: 500 },
         );
       }
@@ -551,8 +736,8 @@ export async function POST(request: Request) {
     const intentionForEnrichment = clarification?.originalIntention ?? safeIntention;
     const clarifiedIntention = clarification?.chosenIntention ?? safeIntention;
     const intentionHints = await enrichIntention(intentionForEnrichment, resolvedLocale, {
-      apiKey,
-      model,
+      client: siteClient.client,
+      model: siteClient.model,
     });
     const domainContext = (() => {
       if (clarification?.chosenDomainId) {
@@ -567,7 +752,7 @@ export async function POST(request: Request) {
       }
       return inferDomainContext(intentionForEnrichment, resolvedLocale, {
         playbooks,
-        llm: { apiKey, model },
+        llm: { client: siteClient.client, model: siteClient.model },
         hints: intentionHints,
       });
     })();
@@ -575,12 +760,25 @@ export async function POST(request: Request) {
       console.log('[missions.generate] intention_hints', intentionHints);
     }
 
-  const fetchAttempt = async (attempt: number, stepsPerLevel: number) => {
+  const fetchAttempt = async (attempt: number) => {
     const systemHint =
       attempt === 1
         ? `Your last output was rejected because it did not match the schema. RETURN JSON ONLY. Fix JSON shape and required fields. Respond in ${languageName}.`
         : `You are a guide who designs realistic learning missions. Respond in ${languageName}.`;
     const resolvedDomainContext = await domainContext;
+    const clarificationHint = goalClarification
+      ? [
+          `context=${goalClarification.context}`,
+          `comfort=${goalClarification.comfort}`,
+          `deadline_days=${goalClarification.deadline_days}`,
+          goalClarification.notes ? `notes=${goalClarification.notes}` : null,
+        ]
+          .filter(Boolean)
+          .join(', ')
+      : null;
+    const combinedContextHint = [intentionHints.contextHint, clarificationHint]
+      .filter(Boolean)
+      .join(' | ');
     const { system, user } = buildPlanPrompt({
       userGoal: clarifiedIntention,
       originalGoal: clarification?.originalIntention,
@@ -589,64 +787,55 @@ export async function POST(request: Request) {
       playbooks,
       domainLock: resolvedDomainContext,
       goalHint: intentionHints.goalHint,
-      contextHint: intentionHints.contextHint,
+      contextHint: combinedContextHint || undefined,
       validationPreference: intentionHints.validationPreference,
     });
     const systemPrompt = system.replace(
       '4 to 5 steps per level.',
-      `${stepsPerLevel} to ${stepsPerLevel} steps per level.`,
+      [
+        `- Generate exactly ${totalSteps} steps in total.`,
+        `- Group them into levels of ${stepsPerLevel} steps each; the last level may have fewer steps if needed.`,
+        '- Each step represents exactly one day.',
+      ].join('\n'),
     );
     const userPrompt = user;
     const promptHash = sha256(`${systemPrompt}\n\n${userPrompt}`);
     const startedAt = Date.now();
-    const response = await fetch(OPENAI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.6,
-        response_format:
-          attempt === 0
-            ? {
-                type: 'json_schema',
-                json_schema: {
-                  name: 'plan_response',
-                  strict: true,
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      path: { type: 'object' },
-                      missionStubs: { type: 'array' },
-                    },
-                    required: ['path', 'missionStubs'],
-                    additionalProperties: true,
+    const response = await siteClient.client.chat.completions.create({
+      model: siteClient.model,
+      temperature: 0.6,
+      response_format:
+        attempt === 0
+          ? {
+              type: 'json_schema',
+              json_schema: {
+                name: 'plan_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'object' },
+                    missionStubs: { type: 'array' },
                   },
+                  required: ['path', 'missionStubs'],
+                  additionalProperties: true,
                 },
-              }
-            : { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: `${systemHint}\n\n${systemPrompt}`,
-          },
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
-      }),
+              },
+            }
+          : { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `${systemHint}\n\n${systemPrompt}`,
+        },
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
     });
-    if (!response.ok) {
-      return null;
-    }
     const latencyMs = Date.now() - startedAt;
-    const payload = (await response.json()) as {
-      choices: Array<{ message: { content: string } }>;
-    };
-    const content = payload.choices?.[0]?.message?.content ?? '{}';
+    const content = response.choices?.[0]?.message?.content ?? '{}';
     const llmTextExcerpt = content.slice(0, 700);
     const parseJson = () => {
       try {
@@ -681,6 +870,45 @@ export async function POST(request: Request) {
           meta: { promptHash, promptVersion: PLAN_PROMPT_VERSION, latencyMs },
         };
       }
+      const planNormalization = parsed?.path
+        ? normalizeRitualPlan(parsed.path, totalSteps, { stepsPerLevel, locale: resolvedLocale })
+        : null;
+      if (planNormalization) {
+        parsed.path = planNormalization.plan as RawPayload['path'];
+        if (planNormalization.meta.autofillCount > 0 && process.env.NODE_ENV !== 'production') {
+          console.warn(
+            `[missions.generate] autofilled ${planNormalization.meta.autofillCount}/${totalSteps}`,
+            {
+              reason: 'missing_steps',
+              truncatedCount: planNormalization.meta.truncatedCount,
+            },
+          );
+        }
+      }
+      if (parsed?.missionStubs) {
+        const competencyFallback =
+          planNormalization?.plan?.competencies?.find((entry) => entry?.id)?.id ??
+          parsed.missionStubs[0]?.competencyId ??
+          'comp-1';
+        const normalizedStubs = normalizeMissionStubsToTotal(
+          parsed.missionStubs,
+          totalSteps,
+          stepsPerLevel,
+          resolvedLocale,
+          competencyFallback,
+        );
+        if (normalizedStubs.autofillCount > 0 && process.env.NODE_ENV !== 'production') {
+          console.warn(
+            `[missions.generate] autofilled ${normalizedStubs.autofillCount}/${totalSteps}`,
+            {
+              reason: 'missing_stubs',
+              truncatedCount: normalizedStubs.truncatedCount,
+            },
+          );
+        }
+        parsed.missionStubs = normalizedStubs.stubs;
+      }
+
       const validated = validatePayload(parsed);
       if (!validated.ok) {
         return {
@@ -691,8 +919,29 @@ export async function POST(request: Request) {
           meta: { promptHash, promptVersion: PLAN_PROMPT_VERSION, latencyMs },
         };
       }
+      const normalizedValue = validated.value;
+      if (planNormalization?.meta.autofillStepIds?.length) {
+        normalizedValue.path = {
+          ...normalizedValue.path,
+          levels: normalizedValue.path.levels.map((level) => ({
+            ...level,
+            steps: level.steps.map((step) =>
+              planNormalization.meta.autofillStepIds.includes(step.id)
+                ? { ...step, is_autofill: true, description: 'Auto-filled step' }
+                : step,
+            ),
+          })),
+        };
+      }
+      normalizedValue.path = {
+        ...normalizedValue.path,
+        generationSchemaVersion: 2,
+        totalSteps,
+        stepsPerLevel,
+        levelsCount: Math.ceil(totalSteps / stepsPerLevel),
+      };
       return {
-        value: validated.value,
+        value: normalizedValue,
         meta: { promptHash, promptVersion: PLAN_PROMPT_VERSION, latencyMs },
         warnings: validated.warnings,
         axisMappings,
@@ -720,13 +969,10 @@ export async function POST(request: Request) {
     zodIssues?: unknown;
   }> = [];
   let lastExcerpt: string | undefined;
-  const attempts = [
-    { attempt: 0, stepsPerLevel: 4 },
-    { attempt: 1, stepsPerLevel: 4 },
-  ];
+  const attempts = [{ attempt: 0 }, { attempt: 1 }];
 
-  for (const { attempt, stepsPerLevel } of attempts) {
-    const result = await fetchAttempt(attempt, stepsPerLevel);
+  for (const { attempt } of attempts) {
+    const result = await fetchAttempt(attempt);
     if (result?.value) {
       parsed = result.value;
       planMeta = result.meta;
@@ -918,6 +1164,7 @@ export async function POST(request: Request) {
     intention: safeIntention,
     days: safeDays,
     locale: resolvedLocale,
+    audience_safety_level: audienceSafetyLevel,
     createdAt,
     updatedAt: createdAt,
     clarification,
@@ -989,6 +1236,7 @@ export async function POST(request: Request) {
       missionStubs: missionStubsWithSteps,
       missions: [firstMissionFull],
       category: resolvedCategory ?? undefined,
+      audience_safety_level: audienceSafetyLevel,
       debugMeta: {
         domainId,
         domainPlaybookVersion,

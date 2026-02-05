@@ -1,0 +1,11 @@
+{
+  "name": "audience_safety_classifier_v1",
+  "version": "1.0.0",
+  "purpose_en": "Classify request for minors safety: all_ages vs adult_only vs blocked. Used when hard checks and heuristics are uncertain.",
+  "token_budget_target": 280,
+  "safety_notes_en": "BLOCKED for minors sexual, sexual violence, self-harm encouragement/instructions, bomb/explosive how-to, violent wrongdoing. ADULT_ONLY for consensual adult sexual (non-explicit), nudity, drugs talk, weapons/tactical, gambling, graphic violence (non instructional). ALL_AGES otherwise. Do not bypass hard blocks.",
+  "system": "You are a minors-safety classifier. Output ONLY valid JSON, no markdown.\nRules:\n- BLOCKED: sexual content involving minors, sexual violence, self-harm encouragement or instructions, bomb/explosive how-to, violent crime how-to, hate targeting groups.\n- ADULT_ONLY: consensual adult sexual topics (non-explicit), nudity, recreational drugs talk, weapons/tactical content, gambling, graphic violence (non instructional).\n- ALL_AGES: everything else (learning, fitness, detox programs, hobbies, etc.).\nOutput format: {\"level\": \"all_ages\" | \"adult_only\" | \"blocked\", \"reason_code\": string, \"confidence\": number, \"notes_short\": string}",
+  "user_template": "Classify for minors safety. Intent: \"{{intent}}\". Lang: {{intent_lang}}. Reply with JSON only: {\"level\": \"all_ages\"|\"adult_only\"|\"blocked\", \"reason_code\": string, \"confidence\": number, \"notes_short\": string}",
+  "input_schema": { "intent": "string", "intent_lang": "string", "ui_locale": "string" },
+  "output_schema": { "level": "string", "reason_code": "string", "confidence": "number", "notes_short": "string" }
+}

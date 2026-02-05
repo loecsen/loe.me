@@ -72,6 +72,11 @@
   gap: 8px 0;
 }
 
+.intentionCardConfirm {
+  grid-template-rows: auto;
+  gap: 16px;
+}
+
 .daysCard {
   height: auto;
   padding: 20px 24px;
@@ -129,6 +134,11 @@
   vertical-align: top;
 }
 
+.cardFooterConfirm {
+  margin-top: 0;
+  padding-top: 12px;
+}
+
 .addDocs {
   background: none;
   border: none;
@@ -183,20 +193,34 @@
   font-size: 13px;
   color: rgba(20, 20, 40, 0.55);
   margin: 0 0 8px 0;
+  display: grid;
+  gap: 6px;
+}
+
+.suggestedRephraseLabel {
+  font-weight: 500;
+  color: rgba(20, 20, 40, 0.6);
+}
+
+.suggestedRephraseList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
 .suggestedRephraseButton {
-  background: none;
-  border: none;
-  padding: 0;
+  background: #fff;
+  border: 1px solid rgba(20, 20, 40, 0.2);
+  border-radius: 5px;
+  padding: 8px 12px;
   font: inherit;
-  color: #7b56ff;
-  text-decoration: underline;
+  color: #141428;
   cursor: pointer;
 }
 
 .suggestedRephraseButton:hover {
-  color: #5a3fd4;
+  border-color: #7b56ff;
+  color: #7b56ff;
 }
 
 .realismBlock {
@@ -323,6 +347,414 @@
 
 .ambitionSecondary:hover:not(:disabled) {
   background: rgba(20, 20, 40, 0.06);
+}
+
+.audienceSafetyBadge {
+  font-size: 12px;
+  color: rgba(20, 20, 40, 0.7);
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  background: rgba(120, 80, 40, 0.12);
+  border-radius: 6px;
+  border: 1px solid rgba(120, 80, 40, 0.25);
+}
+
+.controllabilityBlock {
+  display: grid;
+  gap: 12px;
+}
+
+.confirmOriginalIntent,
+.confirmReformulation {
+  font-size: 13px;
+  color: rgba(20, 20, 40, 0.7);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.confirmObjectiveQuestion {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(20, 20, 40, 0.8);
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+/* Bloc confirmation : titre guide + encadré objectifs + question + Oui / Je précise */
+.confirmBlock {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.confirmGuideTitle {
+  font-size: 22px;
+  font-weight: 600;
+  color: #141428;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.confirmObjectivesBox {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(20, 20, 40, 0.08);
+  border: 1px solid rgba(20, 20, 40, 0.08);
+}
+
+.confirmObjectivesIcon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  color: #7b56ff;
+}
+
+.confirmObjectivesIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.confirmObjectivesText {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.confirmObjectivesIntro {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(20, 20, 40, 0.85);
+}
+
+.confirmObjectivesList {
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(20, 20, 40, 0.75);
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.confirmYesButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 139, 34, 0.5);
+  background: rgba(144, 238, 144, 0.35);
+  color: #228b22;
+  cursor: pointer;
+}
+
+.confirmYesButton:hover:not(:disabled) {
+  background: rgba(144, 238, 144, 0.5);
+  border-color: #228b22;
+}
+
+.confirmYesIcon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.confirmRefineButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px dashed rgba(20, 20, 40, 0.25);
+  background: #fff;
+  color: rgba(20, 20, 40, 0.8);
+  cursor: pointer;
+}
+
+.confirmRefineButton:hover:not(:disabled) {
+  background: rgba(20, 20, 40, 0.04);
+  border-color: rgba(20, 20, 40, 0.35);
+}
+
+.confirmRefineIcon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.confirmOriginalIntent {
+  font-weight: 600;
+}
+
+/* Inline "Je précise" */
+.clarifyInline {
+  display: grid;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid rgba(20, 20, 40, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.clarifyLoadingText {
+  font-size: 13px;
+  color: rgba(20, 20, 40, 0.7);
+  margin: 0;
+}
+
+.clarifySection {
+  display: grid;
+  gap: 10px;
+}
+
+.clarifyLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(20, 20, 40, 0.7);
+  margin: 0;
+}
+
+.clarifyChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clarifyChip {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 20, 40, 0.18);
+  background: #fff;
+  color: rgba(20, 20, 40, 0.75);
+  cursor: pointer;
+}
+
+.clarifyChipSelected {
+  border-color: rgba(123, 86, 255, 0.6);
+  background: rgba(123, 86, 255, 0.12);
+  color: #4a2cc5;
+  font-weight: 600;
+}
+
+/* Actions inline */
+.clarifyInlineActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.clarifyCancel {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px dashed rgba(20, 20, 40, 0.3);
+  background: #fff;
+  color: rgba(20, 20, 40, 0.8);
+  cursor: pointer;
+}
+
+.clarifyApply {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 139, 34, 0.4);
+  background: rgba(144, 238, 144, 0.4);
+  color: #228b22;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Modal "Je precise" */
+.clarifyModalPanel {
+  width: min(620px, 100%);
+}
+
+.clarifyModalContent {
+  gap: 16px;
+}
+
+.clarifyModalSection {
+  display: grid;
+  gap: 10px;
+}
+
+.clarifyModalLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(20, 20, 40, 0.7);
+  margin: 0;
+}
+
+.clarifyModalChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clarifyModalChip {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 20, 40, 0.18);
+  background: #fff;
+  color: rgba(20, 20, 40, 0.75);
+  cursor: pointer;
+}
+
+.clarifyModalChipSelected {
+  border-color: rgba(123, 86, 255, 0.6);
+  background: rgba(123, 86, 255, 0.12);
+  color: #4a2cc5;
+  font-weight: 600;
+}
+
+.clarifyModalNotes {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(20, 20, 40, 0.12);
+  background: #fff;
+  color: rgba(20, 20, 40, 0.8);
+  resize: vertical;
+}
+
+.clarifyModalCancel {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px dashed rgba(20, 20, 40, 0.3);
+  background: #fff;
+  color: rgba(20, 20, 40, 0.8);
+  cursor: pointer;
+}
+
+.clarifyModalApply {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 139, 34, 0.4);
+  background: rgba(144, 238, 144, 0.4);
+  color: #228b22;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.clarifyModalApply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clarifyModalFallback,
+.clarifyModalError {
+  font-size: 12px;
+  color: rgba(20, 20, 40, 0.6);
+  margin: 0;
+}
+
+.clarifySkeleton {
+  display: grid;
+  gap: 12px;
+}
+
+.clarifySkeletonLine {
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #eef1f6 0%, #f7f8fb 50%, #eef1f6 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+.clarifySkeletonRow {
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #eef1f6 0%, #f7f8fb 50%, #eef1f6 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+
+.controllabilityTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #141428;
+  margin: 0;
+}
+
+.controllabilityBody {
+  font-size: 14px;
+  color: rgba(20, 20, 40, 0.75);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.controllabilityChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.controllabilityChip {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(20, 20, 40, 0.2);
+  background: #fff;
+  color: #141428;
+  cursor: pointer;
+}
+
+.controllabilityChip:hover:not(:disabled) {
+  background: rgba(123, 86, 255, 0.08);
+  border-color: rgba(123, 86, 255, 0.35);
+}
+
+.controllabilityKeepOriginal {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px dashed rgba(20, 20, 40, 0.3);
+  background: transparent;
+  color: #141428;
+  cursor: pointer;
+  justify-self: start;
+}
+
+.controllabilityKeepOriginal:hover:not(:disabled) {
+  background: rgba(20, 20, 40, 0.05);
 }
 
 .realismStretchMessage {
@@ -568,6 +1000,13 @@
   font-weight: 600;
   color: var(--loe-color-text);
   margin-bottom: 6px;
+}
+
+.homeDebugLegend {
+  font-size: 0.7rem;
+  color: var(--loe-color-muted);
+  margin: 0 0 6px 0;
+  line-height: 1.3;
 }
 
 .homeDebugPre {

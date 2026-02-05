@@ -1,0 +1,277 @@
+/* Admin LLM Playground — dev-only. Same tokens as other admin pages. */
+
+.wrap {
+  --loe-bg: #ffffff;
+  --loe-surface: #f9fafb;
+  --loe-surface-muted: #f5f6f9;
+  --loe-text: #1f2937;
+  --loe-muted: #6b7280;
+  --loe-border: #e5e7eb;
+  --loe-border-light: #eef1f5;
+  --loe-accent: #7b56ff;
+  --loe-radius-sm: 10px;
+  --loe-radius-md: 12px;
+  --loe-space-xs: 8px;
+  --loe-space-sm: 12px;
+  --loe-space-md: 16px;
+  --loe-space-lg: 24px;
+  --loe-space-xl: 32px;
+  --loe-space-xxl: 48px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--loe-space-xl) var(--loe-space-md);
+  background: var(--loe-bg);
+  color: var(--loe-text);
+  font-family: inherit;
+}
+
+.header {
+  margin-bottom: var(--loe-space-xxl);
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0 0 var(--loe-space-xs) 0;
+  color: var(--loe-text);
+}
+
+.subtitle {
+  font-size: 0.9375rem;
+  color: var(--loe-muted);
+  margin: 0 0 var(--loe-space-md) 0;
+  line-height: 1.4;
+}
+
+.backLink {
+  display: inline-block;
+  margin-bottom: var(--loe-space-lg);
+  margin-right: var(--loe-space-sm);
+  font-size: 0.875rem;
+  color: var(--loe-accent);
+  text-decoration: none;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.devOnlyBadge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--loe-radius-sm);
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-left: var(--loe-space-sm);
+}
+
+.siteLlmLine {
+  font-size: 0.875rem;
+  color: var(--loe-muted);
+  margin: var(--loe-space-sm) 0 0 0;
+}
+
+.sharedSection {
+  margin-bottom: var(--loe-space-xl);
+}
+
+.sectionTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 var(--loe-space-md) 0;
+  color: var(--loe-text);
+  padding-bottom: var(--loe-space-xs);
+  border-bottom: 1px solid var(--loe-border-light);
+}
+
+.label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--loe-text);
+  margin-bottom: var(--loe-space-xs);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: var(--loe-space-sm);
+  border: 1px solid var(--loe-border);
+  border-radius: var(--loe-radius-sm);
+  font-size: 0.875rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.textareaPrompt {
+  min-height: 120px;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--loe-space-xl);
+  margin-top: var(--loe-space-lg);
+}
+
+@media (max-width: 800px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--loe-space-md);
+  padding: var(--loe-space-md);
+  border: 1px solid var(--loe-border-light);
+  border-radius: var(--loe-radius-md);
+  background: var(--loe-surface);
+}
+
+.columnTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--loe-text);
+}
+
+.configRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--loe-space-sm);
+  align-items: center;
+}
+
+.routingGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--loe-space-md);
+  margin-top: var(--loe-space-sm);
+}
+
+.routingRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--loe-space-sm);
+  align-items: center;
+}
+
+.routingLabel {
+  min-width: 120px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--loe-text);
+}
+
+.select {
+  min-width: 100px;
+  padding: 8px 12px;
+  border: 1px solid var(--loe-border);
+  border-radius: var(--loe-radius-sm);
+  font-size: 0.875rem;
+}
+
+.input {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 12px;
+  border: 1px solid var(--loe-border);
+  border-radius: var(--loe-radius-sm);
+  font-size: 0.875rem;
+}
+
+.responsePanel {
+  order: -1;
+  padding: var(--loe-space-sm);
+  border-radius: var(--loe-radius-sm);
+  background: var(--loe-surface-muted);
+  border: 1px solid var(--loe-border-light);
+  min-height: 80px;
+}
+
+.responsePanelEmpty {
+  color: var(--loe-muted);
+  font-size: 0.875rem;
+}
+
+.responseContent {
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.responseMeta {
+  font-size: 0.75rem;
+  color: var(--loe-muted);
+  margin-top: var(--loe-space-xs);
+}
+
+.responseError {
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.suspiciousBadge {
+  display: inline-block;
+  margin-left: var(--loe-space-sm);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.configHint {
+  font-size: 0.75rem;
+  color: var(--loe-muted);
+  margin-top: var(--loe-space-xs);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--loe-space-sm);
+  margin-top: var(--loe-space-md);
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: var(--loe-radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: var(--loe-accent);
+  color: #fff;
+}
+
+.btn:hover:not(:disabled) {
+  background: #6a45e6;
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btnSecondary {
+  background: var(--loe-surface);
+  border: 1px solid var(--loe-border);
+  color: var(--loe-text);
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background: var(--loe-surface-muted);
+}
+
+.btnSetDefault {
+  font-size: 0.8125rem;
+  padding: 6px 12px;
+}

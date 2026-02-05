@@ -1,0 +1,20 @@
+{
+  "lang": "_sample",
+  "version": "lexicon-pack-v1",
+  "generated_at": "2025-01-01T00:00:00.000Z",
+  "generated_by": { "provider": "loe", "model": "sample", "prompt_version": "1" },
+  "confidence": 0.8,
+  "notes": "Minimal sample pack for smoke tests. No network.",
+  "normalize": { "lower": true, "strip_diacritics": true },
+  "tokens": {
+    "greetings": ["hi", "hello"],
+    "learning_verbs": ["learn", "study"],
+    "consume_verbs": ["eat", "drink"],
+    "romantic_markers": ["love", "ex"],
+    "institution_markers": ["visa", "court"],
+    "selection_markers": ["hired", "admitted"],
+    "market_markers": ["stock", "lottery"],
+    "elite_role_markers": ["CEO", "champion"],
+    "superlative_markers": ["best", "famous"]
+  }
+}

@@ -1,0 +1,53 @@
+/* Admin Prompts — same tokens as Admin Knowledge. */
+
+.wrap {
+  --loe-bg: #ffffff;
+  --loe-surface: #f9fafb;
+  --loe-text: #1f2937;
+  --loe-muted: #6b7280;
+  --loe-border: #e5e7eb;
+  --loe-accent: #7b56ff;
+  --loe-radius-sm: 10px;
+  --loe-space-md: 16px;
+  --loe-space-lg: 24px;
+  --loe-space-xl: 32px;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--loe-space-xl) var(--loe-space-md);
+  background: var(--loe-bg);
+  color: var(--loe-text);
+  font-family: inherit;
+}
+
+.header { margin-bottom: 1.5rem; }
+.title { font-size: 1.75rem; font-weight: 600; margin: 0 0 0.5rem 0; }
+.subtitle { font-size: 0.9375rem; color: var(--loe-muted); margin: 0; }
+.section { margin-top: var(--loe-space-lg); }
+.sectionTitle { font-size: 1.125rem; font-weight: 600; margin: 0 0 0.75rem 0; }
+.card {
+  background: var(--loe-surface);
+  border: 1px solid var(--loe-border);
+  border-radius: var(--loe-radius-sm);
+  padding: var(--loe-space-md);
+  margin-bottom: 0.75rem;
+}
+.cardName { font-weight: 600; margin: 0 0 0.25rem 0; }
+.meta { font-size: 0.875rem; color: var(--loe-muted); margin: 0.25rem 0; }
+.pre { white-space: pre-wrap; font-size: 0.8125rem; background: #f5f6f9; padding: 0.75rem; border-radius: 6px; margin: 0.5rem 0 0 0; max-height: 200px; overflow: auto; }
+.link { color: var(--loe-accent); text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+.missingList { list-style: none; margin: 0; padding: 0; }
+.missingItem { display: flex; align-items: center; gap: var(--loe-space-md); margin-bottom: 0.5rem; }
+.missingItem code { font-size: 0.875rem; background: var(--loe-surface); padding: 0.25rem 0.5rem; border-radius: 4px; }
+.bootstrapBtn {
+  font-size: 0.875rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--loe-accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.bootstrapBtn:hover:not(:disabled) { opacity: 0.9; }
+.bootstrapBtn:disabled { opacity: 0.6; cursor: not-allowed; }

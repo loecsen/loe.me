@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import { headers } from 'next/headers';
 import AppShell from './components/AppShell';
 import { I18nProvider } from './components/I18nProvider';
+import SplashRemover from './components/SplashRemover';
 import { getLocaleFromAcceptLanguage } from './lib/i18n';
 
 import '@loe/ui/styles.css';
@@ -30,6 +31,13 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang={initialLocale}>
       <body className={inter.className}>
+        {/* Preloader : splash bleu "Stop scroll. Act." affiché avant le reste */}
+        <div id="loe-splash" className="loe-splash" role="presentation" aria-hidden="true">
+          <div className="loe-splash-glow1" />
+          <div className="loe-splash-glow2" />
+          <h1 className="loe-splash-slogan">Stop scroll. Act.</h1>
+        </div>
+        <SplashRemover />
         <I18nProvider initialLocale={initialLocale} acceptLanguage={acceptLanguage}>
           <AppShell>{children}</AppShell>
         </I18nProvider>

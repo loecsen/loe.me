@@ -10,11 +10,11 @@ import {
   writePngFromBase64,
   getDataPath,
 } from '../../../lib/storage/fsStore';
+import { getSiteLlmClientForTier } from '../../../lib/llm/router';
 
 export const runtime = 'nodejs';
 
 const STABILITY_URL = 'https://api.stability.ai/v2beta/stable-image/generate/core';
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const rateLimitMap = new Map<string, number[]>();
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = Number(process.env.OPENAI_IMAGE_RATE_LIMIT_PER_MIN ?? 60);
@@ -34,46 +34,33 @@ const shouldTranslate = (value: string) =>
   );
 
 const translateFields = async ({
-  apiKey,
+  client,
   model,
   title,
   summary,
   fallback,
 }: {
-  apiKey: string;
+  client: Awaited<ReturnType<typeof getSiteLlmClientForTier>>['client'];
   model: string;
   title: string;
   summary: string;
   fallback: string;
 }) => {
-  const response = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Translate text to concise English. Return ONLY valid JSON with keys: title, summary, fallback.',
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({ title, summary, fallback }),
-        },
-      ],
-    }),
+  const payload = await client.chat.completions.create({
+    model,
+    temperature: 0.2,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Translate text to concise English. Return ONLY valid JSON with keys: title, summary, fallback.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({ title, summary, fallback }),
+      },
+    ],
   });
-  if (!response.ok) {
-    return null;
-  }
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
   const raw = payload?.choices?.[0]?.message?.content?.trim() ?? '';
   try {
     return JSON.parse(raw) as { title?: string; summary?: string; fallback?: string };
@@ -97,8 +84,11 @@ const isRateLimited = (key: string) => {
   return list.length > MAX_PER_WINDOW;
 };
 
+const SAFE_IMAGE_PROMPT_SERVER =
+  'Educational, non-explicit, no nudity, tasteful schematic, silhouettes.';
+
 export async function POST(request: Request) {
-  const { prompt, size, styleId, title, summary, promptOverride, userLang, sceneDirection } =
+  const { prompt, size, styleId, title, summary, promptOverride, userLang, sceneDirection, audience_safety_level } =
     (await request.json()) as {
       prompt?: string;
       size?: '340x190' | '512x512';
@@ -109,7 +99,12 @@ export async function POST(request: Request) {
       promptOverride?: string;
       userLang?: string;
       sceneDirection?: SceneDirection;
+      audience_safety_level?: 'all_ages' | 'adult_only' | 'blocked';
     };
+
+  if (audience_safety_level === 'blocked') {
+    return NextResponse.json({ imageDataUrl: null, error: 'audience_safety_blocked' }, { status: 200 });
+  }
 
   const featureEnabled = (process.env.FEATURE_IMAGES_ENABLED ?? 'true').toLowerCase();
   if (featureEnabled === 'false' || featureEnabled === '0' || featureEnabled === 'off') {
@@ -142,9 +137,11 @@ export async function POST(request: Request) {
 
   const style = getImageStyle(styleId ?? DEFAULT_IMAGE_STYLE_ID);
   const styleText =
-    typeof promptOverride === 'string' && promptOverride.trim().length > 0
-      ? promptOverride.trim()
-      : style.prompt;
+    audience_safety_level === 'adult_only'
+      ? SAFE_IMAGE_PROMPT_SERVER
+      : typeof promptOverride === 'string' && promptOverride.trim().length > 0
+        ? promptOverride.trim()
+        : style.prompt;
 
   const getSceneDirection = (
     titleText: string,
@@ -164,12 +161,11 @@ export async function POST(request: Request) {
     .filter(Boolean)
     .some((value) => shouldTranslate(value ?? ''));
   if (shouldTranslatePrompt) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-    if (apiKey) {
+    try {
+      const siteClient = await getSiteLlmClientForTier('default');
       const translated = await translateFields({
-        apiKey,
-        model,
+        client: siteClient.client,
+        model: siteClient.model,
         title: subjectTitle,
         summary: subjectSummary,
         fallback: fallbackSubject,
@@ -179,6 +175,8 @@ export async function POST(request: Request) {
         promptSummary = translated.summary?.trim() || promptSummary;
         promptFallback = translated.fallback?.trim() || promptFallback;
       }
+    } catch {
+      // Ignore translation errors; fall back to original text.
     }
   }
 
@@ -373,6 +371,7 @@ export async function POST(request: Request) {
         imageHash,
         imageUrl: `/api/images/file?hash=${imageHash}`,
         imageDataUrl: dataUrl,
+        ...(process.env.NODE_ENV !== 'production' && { llm_tier: 'default' as const }),
       });
     }
     return NextResponse.json({ imageDataUrl: null, error: 'invalid_image' }, { status: 200 });

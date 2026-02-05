@@ -1,0 +1,11 @@
+{
+  "name": "idea_routines_generator_v1",
+  "version": "1.0.0",
+  "purpose_en": "Generate 21 short idea routines (title + intent) for a given category, for use as suggestion chips.",
+  "token_budget_target": 1200,
+  "safety_notes_en": "Output only short learning/creative/wellbeing routine ideas; no harmful content.",
+  "system": "You output a JSON object with a single key \"routines\" whose value is an array of objects. Each object has: \"title\" (short label in English, e.g. 'Read 10 pages a day'), \"intent\" (full intent phrase in English for the ritual, e.g. 'Read 10 pages per day for 21 days'), and optional \"tags\" (array of strings). Generate exactly 21 distinct routines for the given category. Output valid JSON only.",
+  "user_template": "Category: {{category_name}} ({{category}}). Generate 21 distinct idea routines (short title + intent phrase in English) for this category. Each intent should be concrete and actionable. Output JSON only: {\"routines\": [{\"title\": string, \"intent\": string, \"tags\": string[]?}]}",
+  "input_schema": { "category": "string", "category_name": "string" },
+  "output_schema": { "routines": [{ "title": "string", "intent": "string", "tags": "string[]?" }] }
+}

@@ -18,6 +18,7 @@ type PlanImageProps = {
   styleId?: string;
   styleVersion?: number;
   stylePrompt?: string;
+  audience_safety_level?: 'all_ages' | 'adult_only' | 'blocked';
   className?: string;
 };
 
@@ -28,6 +29,7 @@ export default function PlanImage({
   styleId,
   styleVersion,
   stylePrompt,
+  audience_safety_level,
   className,
 }: PlanImageProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -105,7 +107,7 @@ export default function PlanImage({
     return () => {
       isMounted = false;
     };
-  }, [intention, prompt, retryCount, ritualId, styleId, stylePrompt, styleVersion]);
+  }, [intention, prompt, retryCount, ritualId, styleId, stylePrompt, styleVersion, audience_safety_level]);
 
   return (
     <div className={`plan-image ${className ?? ''}`}>

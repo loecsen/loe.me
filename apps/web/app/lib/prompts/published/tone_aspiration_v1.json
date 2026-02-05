@@ -1,0 +1,11 @@
+{
+  "name": "tone_aspiration_v1",
+  "version": "1.0.0",
+  "purpose_en": "Detect tone and whether user needs ambition confirmation (life goal / role aspiration).",
+  "token_budget_target": 60,
+  "safety_notes_en": "No user content in output; tone and boolean only.",
+  "system": "You are a tone classifier. Output valid JSON only.",
+  "user_template": "Intent: \"{{intent}}\". Tone: serious, aspirational, playful, or joke? Does this sound like a big life goal that needs confirmation? Reply with JSON: {\"tone\": string, \"requires_confirmation\": boolean, \"rationale_en\": string}",
+  "input_schema": { "intent": "string" },
+  "output_schema": { "tone": "string", "requires_confirmation": "boolean", "rationale_en": "string" }
+}

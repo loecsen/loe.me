@@ -8,7 +8,14 @@ export type RuleGate =
   | 'classifier'
   | 'category'
   | 'realism_soft'
-  | 'confirmation';
+  | 'confirmation'
+  | 'controllability'
+  | 'language_policy'
+  | 'lexicon'
+  | 'decision_db'
+  | 'decision_engine_selection'
+  | 'audience_safety'
+  | 'ui_copy_variants';
 
 export type RuleOutcome =
   | 'ACTIONABLE'
@@ -19,7 +26,8 @@ export type RuleOutcome =
   | 'CONFIRMATION'
   | 'ok'
   | 'stretch'
-  | 'unrealistic';
+  | 'unrealistic'
+  | 'controllability_support';
 
 export type RuleDoc = {
   id: string;

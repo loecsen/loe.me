@@ -1,0 +1,21 @@
+{
+  "version": "dev-llm-settings-v1",
+  "updated_at": "2026-02-04T18:24:07.089Z",
+  "provider": "openai",
+  "model": "qwen-max-2025-01-25",
+  "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  "routing": {
+    "default": {
+      "provider": "qwen",
+      "model": "qwen-turbo"
+    },
+    "reasoning": {
+      "provider": "qwen",
+      "model": "qwen-plus"
+    },
+    "fast": {
+      "provider": "qwen",
+      "model": "qwen-turbo"
+    }
+  }
+}

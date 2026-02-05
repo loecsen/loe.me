@@ -1,0 +1,11 @@
+{
+  "name": "category_analysis_v1_SOCIAL",
+  "version": "1.0.0",
+  "purpose_en": "Analyze SOCIAL intent: actionable, needs_clarification, angles (2-4) in intent language.",
+  "token_budget_target": 180,
+  "safety_notes_en": "Angles must be controllable social goals.",
+  "system": "You are an analyst for social/collective goals. Output valid JSON only. You MUST output label, next_intent and clarify_question in the SAME language as intent_lang. Angles: 2-4 chips. notes_en must be short (<= 120 chars). When asking for clarification: ask for a LEARNING or RITUAL GOAL (what the user wants to learn or achieve), never ask what to do with an object (email, phone, etc.). If the intent is not a goal (e.g. \"voici mon email\"), use a generic question like \"Quel objectif souhaitez-vous atteindre ?\" or \"Indiquez un objectif d'apprentissage ou de progression.\"",
+  "user_template": "Intent: \"{{intent}}\". UI locale: {{ui_locale}}. Intent language: {{intent_lang}}. Days: {{days}}. Is this actionable as a day-by-day ritual goal? If unclear or not a goal, set needs_clarification and clarify_question. clarify_question MUST ask for a learning/ritual goal (what to learn or achieve), NOT what to do with an object. When needs_clarification, also provide 2-4 suggested_rewrites (label, next_intent) in intent language. If actionable, give 2-4 angles (label, next_intent). Reply with JSON: {\"actionable\": boolean, \"needs_clarification\": boolean, \"clarify_question\": string|null, \"angles\": [{\"label\": string, \"next_intent\": string}]|null, \"suggested_rewrites\": [{\"label\": string, \"next_intent\": string}]|null, \"notes_en\": string}",
+  "input_schema": { "intent": "string", "ui_locale": "string", "intent_lang": "string", "days": "number" },
+  "output_schema": { "actionable": "boolean", "needs_clarification": "boolean", "clarify_question": "string|null", "angles": "array|null", "suggested_rewrites": "array|null", "notes_en": "string" }
+}

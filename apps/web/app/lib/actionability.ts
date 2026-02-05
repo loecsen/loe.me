@@ -5,6 +5,7 @@
 
 import type { ActionabilityGateResult, ActionabilityStatus } from './actionability/types';
 import { Category } from './category';
+import type { LexiconPackTokens } from './lexicon/types';
 
 export type { ActionabilityGateResult, ActionabilityStatus } from './actionability/types';
 export type { Category } from './category';
@@ -115,7 +116,12 @@ export function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** Display language for inline messages/suggestions: script-based heuristics + UI fallback. */
+/**
+ * Display / intent language: inferred from intent (script + lightweight heuristics).
+ * Used for rewrites, normalized_intent, suggested_rephrase (same language as user input).
+ * NOT a constraint: runtime gates work for any input language; English input is NOT required.
+ * Primary fallback: script detection (CJK/Hangul/Kana/Cyrillic/Arabic/Latin); small multi-language lexicons for key patterns.
+ */
 export type DisplayLang = 'en' | 'fr' | 'es' | 'de' | 'it' | 'zh' | 'ja' | 'ko' | 'ru';
 
 const DISPLAY_LANG_FALLBACKS: Record<string, DisplayLang> = {
@@ -143,6 +149,11 @@ function detectLatinDisplayLang(text: string, uiLocale: string): DisplayLang {
   return (DISPLAY_LANG_FALLBACKS[base] as DisplayLang) ?? 'en';
 }
 
+/**
+ * Infer intent language (intentLang) from intent text and UI locale fallback.
+ * Used for: LLM output language (normalized_intent, suggested_rephrase), rewrites, chips.
+ * uiLocale is used ONLY for displayed messages (inline hints, button labels) and as fallback when intent is empty.
+ */
 export function getDisplayLanguage(intent: string, uiLocale: string): DisplayLang {
   const trimmed = (intent ?? '').trim();
   if (!trimmed) {
@@ -245,6 +256,12 @@ function latinWordCount(text: string): number {
   return latinPart ? latinPart.split(/\s+/).filter(Boolean).length : 0;
 }
 
+/**
+ * Runtime intent understanding: must work for any input language. English input is NOT required.
+ * Primary fallback: script detection (CJK/Hangul/Kana/Cyrillic/Arabic/Latin). Small multi-language
+ * lexicons for key patterns: greetings, learning verbs, consume-only, romantic outcomes, elite/superlatives.
+ * If language unknown, fall back to script heuristics + minimal Latin heuristics (detectLatinDisplayLang).
+ */
 /** Social / greeting patterns (lowercase, no accents for Latin). */
 const SOCIAL_PATTERNS = [
   /^(bonjour|salut|coucou|hello|hi|hey|yo|ciao|hola|hallo)$/i,
@@ -255,11 +272,16 @@ const SOCIAL_PATTERNS = [
   /^(你好|您好|嗨|안녕|안녕하세요)$/,
 ];
 
-function isSocialGreeting(text: string): boolean {
+function isSocialGreeting(text: string, extraGreetings?: string[]): boolean {
   const t = normalize(text).toLowerCase();
-  if (!t) return false;
+  const trimmed = t.trim();
+  if (!trimmed) return false;
   for (const p of SOCIAL_PATTERNS) {
-    if (p.test(t.trim())) return true;
+    if (p.test(trimmed)) return true;
+  }
+  if (extraGreetings?.length) {
+    const set = new Set(extraGreetings.map((g) => g.toLowerCase().trim()).filter(Boolean));
+    if (set.has(trimmed)) return true;
   }
   return false;
 }
@@ -270,25 +292,54 @@ function isFairePlusNoun(text: string): boolean {
   return /^\s*faire\s+(des?\s+)?[\p{L}]+/u.test(lower) || /^\s*(make|build|create)\s+[\p{L}]+/iu.test(lower);
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** "manger pizza", "eat pizza" → consume only, pas objectif apprentissage (borderline). */
-function isConsumeOnly(text: string): boolean {
+function isConsumeOnly(text: string, extraConsumeVerbs?: string[]): boolean {
   const lower = normalize(text).toLowerCase();
-  return /^\s*(manger|eat|drink|boire|consommer)\s+/u.test(lower);
+  if (/^\s*(manger|eat|drink|boire|consommer)\s+/u.test(lower)) return true;
+  if (extraConsumeVerbs?.length) {
+    const escaped = extraConsumeVerbs.map((v) => escapeRegex(v.trim().toLowerCase()).replace(/\s+/g, '\\s+')).filter(Boolean);
+    if (escaped.length) {
+      try {
+        const re = new RegExp(`^\\s*(${escaped.join('|')})\\s+`, 'u');
+        if (re.test(lower)) return true;
+      } catch {
+        /* ignore invalid regex */
+      }
+    }
+  }
+  return false;
 }
 
 /** Learning/skill verb + something (apprendre, learn, improve). */
-function hasLearningVerb(text: string): boolean {
+function hasLearningVerb(text: string, extraLearningVerbs?: string[]): boolean {
   const lower = normalize(text).toLowerCase();
-  return /\b(apprendre|learn|improve|ameliorer|study|étudier)\b/i.test(lower);
+  if (/\b(apprendre|learn|improve|ameliorer|study|étudier)\b/i.test(lower)) return true;
+  if (extraLearningVerbs?.length) {
+    const escaped = extraLearningVerbs.map((v) => escapeRegex(v.trim()).replace(/\s+/g, '\\s+')).filter(Boolean);
+    if (escaped.length) {
+      try {
+        const re = new RegExp(`\\b(${escaped.join('|')})\\b`, 'i');
+        if (re.test(lower)) return true;
+      } catch {
+        /* ignore invalid regex */
+      }
+    }
+  }
+  return false;
 }
 
-/** Wellbeing / grounding keywords (including vague emotional/relationship intents). */
+/** Wellbeing / grounding keywords (including vague emotional/relationship intents). Romance → WELLBEING. */
 function hasWellbeingHint(text: string): boolean {
   const lower = normalize(text).toLowerCase();
   return (
     /\b(meditation|mindfulness|breath|respiration|sleep|sommeil|stress|relax|yoga|pleine conscience)\b/i.test(lower) ||
     /\b(triste|sad|récupérer|recover|bien-être|wellbeing|émotion|emotion|sentiment|feeling)\b/i.test(lower) ||
-    /\b(ex\s+copine|ex\s+copain|ex\s+partner|mon ex)\b/i.test(lower)
+    /\b(ex\s+copine|ex\s+copain|ex\s+partner|mon ex)\b/i.test(lower) ||
+    /\b(get\s+my\s+ex\s+back|get\s+ex\s+back|win\s+.*\s+back)\b/i.test(lower)
   );
 }
 
@@ -298,12 +349,15 @@ function hasChallengeHint(text: string): boolean {
   return /\b(challenge|défi|transformation|habitude|routine)\b/i.test(lower);
 }
 
-/** Infer category from intent (heuristic only; classifier can override). */
-export function inferCategoryFromIntent(text: string): string | undefined {
+/** Infer category from intent (heuristic only; classifier can override). Optional lexicon tokens augment baseline. */
+export function inferCategoryFromIntent(
+  text: string,
+  lexiconTokens?: LexiconPackTokens | null,
+): string | undefined {
   const normalized = normalize(text);
   if (!normalized) return undefined;
-  if (isSocialGreeting(normalized)) return Category.SOCIAL;
-  if (hasLearningVerb(normalized)) return Category.LEARN;
+  if (isSocialGreeting(normalized, lexiconTokens?.greetings)) return Category.SOCIAL;
+  if (hasLearningVerb(normalized, lexiconTokens?.learning_verbs)) return Category.LEARN;
   if (isFairePlusNoun(normalized)) return Category.CREATE;
   if (hasWellbeingHint(normalized)) return Category.WELLBEING;
   if (hasChallengeHint(normalized)) return Category.CHALLENGE;
@@ -314,12 +368,17 @@ export function inferCategoryFromIntent(text: string): string | undefined {
  * Actionability Gate v2: décision sans LLM.
  * @param text - Intention utilisateur
  * @param timeframe_days - Optionnel; si présent et objectif apprentissage, favorise ACTIONABLE
+ * @param lexiconTokens - Optionnel; tokens d'un pack lexique (getLexiconForIntent / getLexSignals) pour signaux additionnels
  */
-export function runActionabilityV2(text: string, timeframe_days?: number): ActionabilityResult {
+export function runActionabilityV2(
+  text: string,
+  timeframe_days?: number,
+  lexiconTokens?: LexiconPackTokens | null,
+): ActionabilityResult {
   const normalized = normalize(text);
   const letters = lettersOnly(normalized);
   const scriptStats = detectScriptStats(normalized);
-  const inferredCategory = inferCategoryFromIntent(normalized);
+  const inferredCategory = inferCategoryFromIntent(normalized, lexiconTokens);
 
   const features: ActionabilityFeatures = {
     char_count_effective: letters.length,
@@ -389,7 +448,7 @@ export function runActionabilityV2(text: string, timeframe_days?: number): Actio
         },
       };
     }
-    if (isConsumeOnly(normalized)) {
+    if (isConsumeOnly(normalized, lexiconTokens?.consume_verbs)) {
       return {
         action: 'borderline',
         reason_code: 'borderline_actionable',

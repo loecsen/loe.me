@@ -9,7 +9,7 @@ import { mockFriends, type MockFriend } from './mockFriends';
 
 const PRAVATAR_BASE = 'https://i.pravatar.cc/100';
 
-/** imageUrl à null : RitualCard utilise PlanImage qui génère/récupère le PNG lié au rituel (cache ritual_${id}) */
+/** imageUrl à null : en mock, RitualHistory injecte une cover du répertoire à l'affichage (getCoverUrl). */
 
 function toFriendInTooltip(
   m: MockFriend,

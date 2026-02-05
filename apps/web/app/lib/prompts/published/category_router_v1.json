@@ -1,0 +1,11 @@
+{
+  "name": "category_router_v1",
+  "version": "1.0.0",
+  "purpose_en": "Route user intent to one category: LEARN, CREATE, PERFORM, WELLBEING, SOCIAL, CHALLENGE.",
+  "token_budget_target": 80,
+  "safety_notes_en": "No user content in output; category and rationale only.",
+  "system": "You are a classifier. Output valid JSON only. Choose exactly one category.",
+  "user_template": "Which category fits this goal? Intent: \"{{intent}}\". Categories: LEARN, CREATE, PERFORM, WELLBEING, SOCIAL, CHALLENGE. Reply with JSON: {\"category\": string, \"subcategory\": string|null, \"confidence\": 0-1, \"rationale_en\": string}",
+  "input_schema": { "intent": "string" },
+  "output_schema": { "category": "string", "subcategory": "string|null", "confidence": "number", "rationale_en": "string" }
+}

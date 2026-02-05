@@ -24,6 +24,7 @@ export default function AppShell({ children }: AppShellProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const isHome = pathname === '/';
+  const isMission = pathname?.startsWith('/mission');
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -43,75 +44,81 @@ export default function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <Container className="header-inner">
-          <Link className="brand" href="/">
-            <span className="brand-dot" />
-            <span>Loe.me</span>
-          </Link>
-          <div className="header-actions">
-            <select
-              className="locale-toggle"
-              value={locale}
-              onChange={(event) => setLocale(event.target.value as typeof locale)}
-              aria-label="Language"
-            >
-              {supportedLocales.map((option) => (
-                <option key={option} value={option}>
-                  {option.toUpperCase()}
-                </option>
-              ))}
-            </select>
+      {!isMission && (
+        <header className="app-header">
+          <Container className="header-inner">
+            <Link className="brand" href="/">
+              <span className="brand-dot" />
+              <span>Loe.me</span>
+            </Link>
+            <div className="header-actions">
+              <select
+                className="locale-toggle"
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as typeof locale)}
+                aria-label="Language"
+              >
+                {supportedLocales.map((option) => (
+                  <option key={option} value={option}>
+                    {option.toUpperCase()}
+                  </option>
+                ))}
+              </select>
 
-            {session ? (
-              <div className="account-menu">
-                <button
-                  className="user-pill"
-                  onClick={() => setMenuOpen((prev) => !prev)}
-                  type="button"
-                >
-                  {displayEmail}
-                  <span className="user-pill-chevron">⌄</span>
+              {session ? (
+                <div className="account-menu">
+                  <button
+                    className="user-pill"
+                    onClick={() => setMenuOpen((prev) => !prev)}
+                    type="button"
+                  >
+                    {displayEmail}
+                    <span className="user-pill-chevron">⌄</span>
+                  </button>
+                  {menuOpen && (
+                    <div className="account-dropdown">
+                      <button
+                        type="button"
+                        className="dropdown-item"
+                        onClick={() => {
+                          setAccountOpen(true);
+                          setMenuOpen(false);
+                        }}
+                      >
+                        Account
+                      </button>
+                      <button
+                        type="button"
+                        className="dropdown-item"
+                        onClick={() => {
+                          signOut();
+                          setMenuOpen(false);
+                        }}
+                      >
+                        Log out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button className="primary-button" onClick={() => setAuthOpen(true)}>
+                  Sign in
                 </button>
-                {menuOpen && (
-                  <div className="account-dropdown">
-                    <button
-                      type="button"
-                      className="dropdown-item"
-                      onClick={() => {
-                        setAccountOpen(true);
-                        setMenuOpen(false);
-                      }}
-                    >
-                      Account
-                    </button>
-                    <button
-                      type="button"
-                      className="dropdown-item"
-                      onClick={() => {
-                        signOut();
-                        setMenuOpen(false);
-                      }}
-                    >
-                      Log out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button className="primary-button" onClick={() => setAuthOpen(true)}>
-                Sign in
-              </button>
-            )}
+              )}
 
-            <button className="help-button" aria-label="Help">
-              ?
-            </button>
-          </div>
-        </Container>
-      </header>
-      <main className={`app-main${isHome ? ' app-main-home' : ''}`}>
-        {isHome ? children : <Container>{children}</Container>}
+              <button className="help-button" aria-label="Help">
+                ?
+              </button>
+            </div>
+          </Container>
+        </header>
+      )}
+      <main
+        className={`app-main${isHome ? ' app-main-home' : ''}${
+          isMission ? ' app-main-mission' : ''
+        }`}
+      >
+        {isHome || isMission ? children : <Container>{children}</Container>}
       </main>
       <AuthModal
         open={authOpen}

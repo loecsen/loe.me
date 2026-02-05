@@ -132,6 +132,24 @@ export default function AdminRulesPage() {
       <Link href="/" className={styles.backLink}>
         ← Home
       </Link>
+      <Link href="/admin/lexicon" className={styles.backLink} style={{ marginLeft: 8 }}>
+        Language Packs
+      </Link>
+      <Link href="/admin/knowledge" className={styles.backLink} style={{ marginLeft: 8 }}>
+        Knowledge (dev DB)
+      </Link>
+      <Link href="/admin/eval" className={styles.backLink} style={{ marginLeft: 8 }}>
+        Eval Harness
+      </Link>
+      <Link href="/admin/prompts" className={styles.backLink} style={{ marginLeft: 8 }}>
+        Admin Prompts
+      </Link>
+      <Link href="/admin/messages" className={styles.backLink} style={{ marginLeft: 8 }}>
+        Messages
+      </Link>
+      <Link href="/admin/llm" className={styles.backLink} style={{ marginLeft: 8 }}>
+        LLM Playground
+      </Link>
 
       <header className={styles.header}>
         <h1 className={styles.title}>{PAGE_TITLE}</h1>

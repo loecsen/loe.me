@@ -24,13 +24,25 @@ export async function buildPlanImageKey(intention: string) {
 
 type ImageFetchResult = { imageUrl: string | null; imageDataUrl: string | null };
 
+const SAFE_IMAGE_PROMPT_OVERRIDE =
+  'Educational, non-explicit, no nudity, tasteful schematic, silhouettes.';
+
 export async function requestMissionImage(
   key: string,
   prompt: string,
   size: '340x190' | '512x512' = '340x190',
   styleId?: string,
-  meta?: { title?: string; summary?: string; userLang?: string; promptOverride?: string },
+  meta?: {
+    title?: string;
+    summary?: string;
+    userLang?: string;
+    promptOverride?: string;
+    audience_safety_level?: 'all_ages' | 'adult_only' | 'blocked';
+  },
 ): Promise<ImageFetchResult | null> {
+  if (meta?.audience_safety_level === 'blocked') {
+    return null;
+  }
   const style = getImageStyle(styleId);
   const cacheKey = buildImageCacheKey(style, key);
   const now = Date.now();
@@ -65,7 +77,11 @@ export async function requestMissionImage(
           title: meta?.title,
           summary: meta?.summary,
           userLang: meta?.userLang,
-          promptOverride: meta?.promptOverride,
+          promptOverride:
+            meta?.audience_safety_level === 'adult_only'
+              ? SAFE_IMAGE_PROMPT_OVERRIDE
+              : meta?.promptOverride,
+          audience_safety_level: meta?.audience_safety_level,
         }),
       });
       if (!response.ok) {

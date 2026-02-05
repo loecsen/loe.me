@@ -20,6 +20,7 @@ import type {
 } from '@loe/core';
 
 import MissionPlayer from './MissionPlayer';
+import MissionMapLovable from './MissionMapLovable';
 import NotificationsModal from './NotificationsModal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useI18n } from '../components/I18nProvider';
@@ -153,22 +154,6 @@ export default function MissionDashboard() {
     'loe.missionData',
     null,
   );
-  const gatingMode = missionData?.sourcePath?.gatingMode ?? 'soft';
-  const missionIndexMap = useMemo(() => {
-    const map = new Map<string, number>();
-    const blueprint = path?.blueprint;
-    if (!blueprint) {
-      return map;
-    }
-    for (const mission of missions) {
-      const index = getMissionIndex(mission.id, blueprint);
-      if (index) {
-        map.set(mission.id, index);
-      }
-    }
-    return map;
-  }, [missions, path]);
-
   const stepOrder = useMemo(
     () =>
       path.blueprint.levels.flatMap((level) =>
@@ -375,28 +360,6 @@ export default function MissionDashboard() {
     generate();
   }, [locale, missionData?.ritualKey, ritual, setMissionData, setRitual]);
 
-  const getStepTitle = (levelId: string, stepId: string) => {
-    const level = path.blueprint.levels.find((item) => item.id === levelId);
-    const step = level?.steps.find((item) => item.id === stepId);
-    return step?.title ?? '—';
-  };
-
-  const getCurrentLevelLabel = () => {
-    const current = path.progress.current ?? nextAvailableStep;
-    if (!current) {
-      return '—';
-    }
-    const levelIndex = path.blueprint.levels.findIndex((item) => item.id === current.levelId);
-    return levelIndex === -1 ? '—' : `${t.missionLevelPrefix} ${levelIndex + 1}`;
-  };
-
-  const getCurrentStepLabel = () => {
-    const current = path.progress.current ?? nextAvailableStep;
-    if (!current) {
-      return '—';
-    }
-    return getStepTitle(current.levelId, current.stepId);
-  };
 
   const getMissionIdForStep = (levelId: string, stepId: string) => {
     const level = path.blueprint.levels.find((item) => item.id === levelId);
@@ -860,131 +823,49 @@ export default function MissionDashboard() {
     return nextMissionId ? missionsById.get(nextMissionId)?.title ?? null : null;
   })();
 
-  const shouldShowPlaceholder = Boolean(ritual && !missionData && !missionError);
+
+  const planTitle =
+    missionData?.sourcePath?.pathTitle ??
+    ritual?.intention ??
+    (path.blueprint?.title ? path.blueprint.title : t.missionTitle);
+  const levels = path.blueprint.levels.map((level) => ({
+    id: level.id,
+    title: level.title,
+    summary: (level as { summary?: string; objective?: string; description?: string }).summary ??
+      (level as { summary?: string; objective?: string; description?: string }).objective ??
+      (level as { summary?: string; objective?: string; description?: string }).description,
+    steps: level.steps.map((step) => ({ id: step.id, title: step.title })),
+  }));
+  const progressLevels = path.progress.levels.map((level) => ({
+    steps: level.steps.map((step) => ({ state: step.state })),
+  }));
+  const completedCount = path.progress.levels.reduce(
+    (acc, level) => acc + level.steps.filter((step) => step.state === 'completed').length,
+    0,
+  );
+  const totalCount = path.blueprint.levels.reduce((acc, level) => acc + level.steps.length, 0);
+  const currentStepId = nextAvailableStep?.stepId ?? null;
+  const currentStepTitle =
+    currentStepId && missionView?.stepTitle ? missionView.stepTitle : nextMissionTitle;
 
   return (
     <section className="mission-shell">
-      <div className="mission-header">
-        <div>
-          <h1 className="page-title">{t.missionTitle}</h1>
-          <p className="mission-subtitle">{t.missionSubtitle}</p>
-        </div>
-        <div className="mission-header-actions">
-          <button
-            className="icon-button"
-            onClick={() => setShowNotifications(true)}
-            aria-label={t.missionNotifications}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 22a2.4 2.4 0 0 0 2.4-2.4h-4.8A2.4 2.4 0 0 0 12 22Zm6.7-6.6V10a6.7 6.7 0 1 0-13.4 0v5.4l-1.6 1.6a1 1 0 0 0 .7 1.7h15.2a1 1 0 0 0 .7-1.7l-1.6-1.6Z"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
+      {showReady && <div className="ritual-ready">{t.missionReady}</div>}
+      {loadingMissions && <div className="ritual-ready">{t.missionGenerating}</div>}
+      {missionError && <div className="ritual-ready">{t.missionGenerateError}</div>}
 
-      <div className="mission-stats">
-        {showReady && (
-          <div className="ritual-ready">
-            {t.missionReady}
-          </div>
-        )}
-        {loadingMissions && (
-          <div className="ritual-ready">{t.missionGenerating}</div>
-        )}
-        {missionError && <div className="ritual-ready">{t.missionGenerateError}</div>}
-        <div>
-          <span className="stat-label">{t.missionLevelCurrent}</span>
-          <span className="stat-value">{getCurrentLevelLabel()}</span>
-        </div>
-        <div>
-          <span className="stat-label">{t.missionStepCurrent}</span>
-          <span className="stat-value">{getCurrentStepLabel()}</span>
-        </div>
-        <div>
-          <span className="stat-label">{t.missionStreak}</span>
-          <span className="stat-value">0 {t.missionDay}</span>
-        </div>
-      </div>
-
-      {shouldShowPlaceholder ? (
-        <div className="mission-placeholder">
-          {t.missionPlaceholder}
-        </div>
-      ) : (
-        <div className="mission-levels">
-          {path.blueprint.levels.map((level, levelIndex) => {
-            const progressLevel = path.progress.levels[levelIndex];
-            return (
-              <div key={level.id} className="level-card">
-                <div className="level-header">
-                  <div>
-                  <span className="level-kicker">
-                    {t.missionLevelPrefix} {levelIndex + 1}
-                  </span>
-                    <h2>{level.title}</h2>
-                  </div>
-                </div>
-                <div className="level-steps">
-                  <div className="level-spine" aria-hidden="true" />
-                  {level.steps.map((step, stepIndex) => {
-                    const progressStep = progressLevel.steps[stepIndex];
-                    const isNextAvailable =
-                      progressStep.state === 'available' &&
-                      nextAvailableStep?.levelId === level.id &&
-                      nextAvailableStep?.stepId === step.id;
-                    const stepOutcome = getStepOutcome(step.id);
-                    const isClickable =
-                      gatingMode === 'strict'
-                        ? progressStep.state === 'in_progress' ||
-                          isNextAvailable ||
-                          progressStep.state === 'completed'
-                        : true;
-                    return (
-                      <button
-                        key={step.id}
-                        className={`step-node step-${progressStep.state}`}
-                        type="button"
-                        disabled={!isClickable}
-                        onClick={() => (isClickable ? openStep(level.id, step.id) : undefined)}
-                      >
-                        <span className="step-indicator">
-                          {progressStep.state === 'completed' && '✓'}
-                        </span>
-                        <div className="step-text">
-                          <span className="step-title">{step.title}</span>
-                          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                            Statut :{' '}
-                            {stepOutcome === 'success'
-                              ? 'Validé'
-                              : stepOutcome === 'skipped'
-                                ? 'À faire / Skip'
-                                : '—'}
-                          </div>
-                        <span className="step-meta">
-                          {progressStep.state === 'locked' && t.stateLocked}
-                          {progressStep.state === 'available' && t.stateAvailable}
-                          {progressStep.state === 'in_progress' && t.stateInProgress}
-                          {progressStep.state === 'completed' && t.stateCompleted}
-                          {progressStep.state === 'failed' && t.stateFailed}
-                        </span>
-                        {stepOutcome === 'success' && <span className="chip chip-pill">Validé</span>}
-                        {stepOutcome === 'skipped' && (
-                          <span className="chip chip-pill">À faire</span>
-                        )}
-                        </div>
-                        {progressStep.state === 'failed' && <span className="step-warning" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <MissionMapLovable
+        planTitle={planTitle}
+        levels={levels}
+        progressLevels={progressLevels}
+        currentStepId={currentStepId}
+        completedCount={completedCount}
+        totalCount={totalCount}
+        currentStepTitle={currentStepTitle ?? null}
+        onStepClick={openStep}
+        onOpenNotifications={() => setShowNotifications(true)}
+        onCloseMission={() => router.replace('/')}
+      />
 
       <MissionPlayer
         open={playerOpen}

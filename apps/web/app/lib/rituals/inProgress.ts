@@ -8,12 +8,15 @@ export type RitualCategory =
   | 'SOCIAL'
   | 'CHALLENGE';
 
+export type AudienceSafetyLevelRitual = 'all_ages' | 'adult_only' | 'blocked';
+
 export type RitualIndexItem = {
   ritualId: string;
   intention: string;
   days: number;
   status: RitualStatus;
   category?: RitualCategory;
+  audience_safety_level?: AudienceSafetyLevelRitual;
   createdAt: string;
   updatedAt: string;
   lastViewedAt?: string;

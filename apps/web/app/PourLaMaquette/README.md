@@ -9,6 +9,10 @@ Données fictives pour la maquette Home. **Nettoyable en 1 commit** quand les vr
 - **Composants métier** (RitualCard, RitualHistory, etc.) restent 100 % data-driven (props), aucune logique mock dedans
 - **Un seul point d’entrée** qui choisit mock vs vrai : **Home** (`apps/web/app/page.tsx`)
 
+## Lexicon drafts (dev-only)
+
+- **lexicon-drafts/** — Packs de lexique générés à la demande (bootstrap) pour langues non couvertes. Stockés ici en dev uniquement ; promotion vers `lib/lexicon/packs/` via script `scripts/promote-lexicon-pack.mjs`. **Nettoyage en 1 commit** : supprimer les fichiers `.json` dans `lexicon-drafts/` si on abandonne le feature ; le dossier peut rester vide.
+
 ## Fichiers
 
 - **mockFriends.ts** — Profils anglophones (id, fullName, avatarSeed 1..70, stepCurrent, stepTotal, progressPct)

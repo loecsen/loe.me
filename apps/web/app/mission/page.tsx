@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { buildInitialProgress, recomputeStates } from '@loe/core';
 import type { LearningPath, LearningPathBlueprintV2, MissionFull, MissionStub, TraceEvent } from '@loe/core';
 import MissionDashboard from './MissionDashboard';
-import PlanImage from '../components/PlanImage';
 import DebugDecisionPanel from '../components/DebugDecisionPanel';
 import { useI18n } from '../components/I18nProvider';
 import { getImageStyle } from '../lib/images/styles';
@@ -16,25 +15,6 @@ import {
   type RitualIndexItem,
   type RitualRecord,
 } from '../lib/rituals/inProgress';
-
-type ActiveRitualResponse = {
-  ritualId: string;
-  ritual: {
-    intention?: string;
-    path?: { pathTitle?: string; pathSummary?: string; pathDescription?: string };
-    imageStyleId?: string;
-    imageStyleVersion?: number;
-    imageStylePrompt?: string;
-  };
-  currentStep?: {
-    levelTitle?: string;
-    stepTitle?: string;
-    levelIndex?: number;
-    stepIndex?: number;
-  } | null;
-  currentMissionStub?: { id: string; title: string; summary?: string } | null;
-  imageUrl?: string;
-};
 
 type PendingRequest = {
   ritualId: string;
@@ -51,6 +31,7 @@ type MissionsResponse = {
   clarification?: { mode?: string; reason_code?: string };
   reason_code?: string;
   category?: string;
+  audience_safety_level?: 'all_ages' | 'adult_only' | 'blocked';
   debugTrace?: TraceEvent[];
   path: LearningPath & {
     domainId?: string;
@@ -96,8 +77,6 @@ export default function MissionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t, locale } = useI18n();
-  const [active, setActive] = useState<ActiveRitualResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [creatingErrorReason, setCreatingErrorReason] = useState<string | null>(null);
   const [creatingStatus, setCreatingStatus] = useState<'idle' | 'generating' | 'error'>('idle');
@@ -106,49 +85,6 @@ export default function MissionPage() {
 
   const isCreating = searchParams.get('creating') === '1';
   const ritualIdParam = searchParams.get('ritualId') ?? '';
-
-  useEffect(() => {
-    if (isCreating) {
-      return;
-    }
-    let mounted = true;
-    const run = async () => {
-      try {
-        let ritualId = '';
-        if (typeof window !== 'undefined') {
-          ritualId = sessionStorage.getItem('loe.active_ritual_id') ?? '';
-          if (!ritualId) {
-            const raw = window.localStorage.getItem('loe.ritual');
-            if (raw) {
-              ritualId = (JSON.parse(raw) as { ritualId?: string })?.ritualId ?? '';
-            }
-          }
-        }
-        const url = ritualId
-          ? `/api/rituals/active?ritualId=${encodeURIComponent(ritualId)}`
-          : '/api/rituals/active';
-        const response = await fetch(url);
-        if (!response.ok) {
-          setActive(null);
-          return;
-        }
-        const payload = (await response.json()) as ActiveRitualResponse;
-        if (mounted) {
-          setActive(payload);
-        }
-      } catch {
-        setActive(null);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-    run();
-    return () => {
-      mounted = false;
-    };
-  }, [isCreating]);
 
   useEffect(() => {
     if (!isCreating || creatingStatus !== 'error' || !creatingErrorReason || !pendingRequest) return;
@@ -212,6 +148,7 @@ export default function MissionPage() {
           days: pending.days,
           status: 'ready',
           category: data.category ?? pending.category,
+          audience_safety_level: data.audience_safety_level,
           createdAt: now,
           updatedAt: now,
           clarification: pending.clarification,
@@ -255,6 +192,7 @@ export default function MissionPage() {
           days: record.days,
           status: record.status,
           category: record.category,
+          audience_safety_level: data.audience_safety_level ?? record.audience_safety_level,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
           clarification: record.clarification,
@@ -471,6 +409,7 @@ export default function MissionPage() {
           intention: record.intention,
           days: record.days,
           status: record.status,
+          audience_safety_level: record.audience_safety_level,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
           clarification: record.clarification,
@@ -567,48 +506,5 @@ export default function MissionPage() {
     );
   }
 
-  return (
-    <>
-      <section className="mission-shell">
-        <div className="mission-header">
-          <div>
-            <h1 className="page-title">
-              {active?.ritual?.path?.pathTitle ?? (loading ? 'Chargement…' : 'Rituel')}
-            </h1>
-            {active?.ritual?.path?.pathSummary && (
-              <p className="mission-subtitle">
-                {active.ritual.path.pathSummary.replace('[[WM_PLAN_V1]]', '').trim()}
-              </p>
-            )}
-            {active?.ritual?.path?.pathDescription && (
-              <p className="mission-subtitle">{active.ritual.path.pathDescription}</p>
-            )}
-            {active?.currentStep ? (
-              <div className="mission-subtitle">
-                Niveau {active.currentStep.levelIndex} · Étape {active.currentStep.stepIndex} —{' '}
-                {active.currentStep.stepTitle}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="mission-stats">
-          {active?.imageUrl ? (
-            <div className="plan-image">
-              <img src={active.imageUrl} alt={active.ritual?.path?.pathTitle ?? 'Rituel'} />
-            </div>
-          ) : active?.ritual?.intention ? (
-            <PlanImage
-              ritualId={active.ritualId}
-              intention={active.ritual.intention}
-              title={active.ritual.path?.pathTitle}
-              styleId={active.ritual.imageStyleId}
-              styleVersion={active.ritual.imageStyleVersion}
-              stylePrompt={active.ritual.imageStylePrompt}
-            />
-          ) : null}
-        </div>
-      </section>
-      <MissionDashboard />
-    </>
-  );
+  return <MissionDashboard />;
 }

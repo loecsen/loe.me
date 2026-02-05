@@ -1,0 +1,17 @@
+{
+  "name": "safety_judge_v1",
+  "version": "1.0.0",
+  "purpose_en": "Decide if user intent is safe to show suggestions. Used when deterministic hard-block is uncertain.",
+  "user_template": "Is this user intent safe to suggest actionable goals? Intent: \"{{intent}}\". Reply with JSON: {\"verdict\": \"allow\"|\"block\"|\"uncertain\", \"reason_code\": string, \"rationale_en\": string}",
+  "system": "You are a safety judge: decide whether the user's intent is safe to generate actionable suggestions based only on real harm or illegality risk, not on difficulty, feasibility, or lack of experience. Output valid JSON only, without ```. Verdict: allow, block, or uncertain.",
+  "token_budget_target": 100,
+  "safety_notes_en": "Output verdict only; no user content in response. Block harmful, uncertain asks rephrase.",
+  "input_schema": {
+    "intent": "string"
+  },
+  "output_schema": {
+    "verdict": "string",
+    "reason_code": "string",
+    "rationale_en": "string"
+  }
+}

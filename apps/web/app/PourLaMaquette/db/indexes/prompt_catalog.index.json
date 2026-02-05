@@ -1,0 +1,70 @@
+{
+  "safety_judge_v1@1.0.0": {
+    "id": "prompt:safety_judge_v1@1.0.0",
+    "updated_at": "2026-02-05T20:56:21.283Z"
+  },
+  "category_router_v1@1.0.0": {
+    "id": "prompt:category_router_v1@1.0.0",
+    "updated_at": "2026-02-05T20:56:24.875Z"
+  },
+  "tone_aspiration_v1@1.0.0": {
+    "id": "prompt:tone_aspiration_v1@1.0.0",
+    "updated_at": "2026-01-31T21:23:04.540Z"
+  },
+  "audience_safety_classifier_v1@1.0.0": {
+    "id": "prompt:audience_safety_classifier_v1@1.0.0",
+    "updated_at": "2026-02-05T20:56:50.946Z"
+  },
+  "category_analysis_v1_CHALLENGE@1.0.0": {
+    "id": "prompt:category_analysis_v1_CHALLENGE@1.0.0",
+    "updated_at": "2026-02-01T21:10:52.925Z"
+  },
+  "category_analysis_v1_WELLBEING@1.0.0": {
+    "id": "prompt:category_analysis_v1_WELLBEING@1.0.0",
+    "updated_at": "2026-02-05T11:33:35.744Z"
+  },
+  "category_analysis_v1_SOCIAL@1.0.0": {
+    "id": "prompt:category_analysis_v1_SOCIAL@1.0.0",
+    "updated_at": "2026-02-04T18:25:27.079Z"
+  },
+  "category_analysis_v1_LEARN@1.0.0": {
+    "id": "prompt:category_analysis_v1_LEARN@1.0.0",
+    "updated_at": "2026-02-05T20:56:27.136Z"
+  },
+  "category_analysis_v1_CREATE@1.0.0": {
+    "id": "prompt:category_analysis_v1_CREATE@1.0.0",
+    "updated_at": "2026-02-01T21:38:23.195Z"
+  },
+  "tone_classifier_v1@1.0.0": {
+    "id": "prompt:tone_classifier_v1@1.0.0",
+    "updated_at": "2026-02-05T20:56:36.685Z"
+  },
+  "equivalence_judge_v1@1.0.0": {
+    "id": "prompt:equivalence_judge_v1@1.0.0",
+    "updated_at": "2026-02-04T22:19:25.439Z"
+  },
+  "realism_judge_v1@1.0.0": {
+    "id": "prompt:realism_judge_v1@1.0.0",
+    "updated_at": "2026-02-05T20:56:30.961Z"
+  },
+  "intent_reformulation_v1@1.0.0": {
+    "id": "prompt:intent_reformulation_v1@1.0.0",
+    "updated_at": "2026-02-01T21:27:08.836Z"
+  },
+  "intent_reformulation_v2@1.0.0": {
+    "id": "prompt:intent_reformulation_v2@1.0.0",
+    "updated_at": "2026-02-05T20:56:23.992Z"
+  },
+  "objectives_preview_v1@1.0.0": {
+    "id": "prompt:objectives_preview_v1@1.0.0",
+    "updated_at": "2026-02-05T20:56:32.696Z"
+  },
+  "category_analysis_v1_PERFORM@1.0.0": {
+    "id": "prompt:category_analysis_v1_PERFORM@1.0.0",
+    "updated_at": "2026-02-05T11:28:34.885Z"
+  },
+  "clarify_chips_v1@1.0.0": {
+    "id": "prompt:clarify_chips_v1@1.0.0",
+    "updated_at": "2026-02-05T08:25:34.131Z"
+  }
+}

@@ -13,9 +13,9 @@ export type LifeGoalResult = {
   langHint?: LangHint;
 };
 
-/** Guard: intent contains actionable frame (en X jours, minutes par jour, etc.) => no intercept */
+/** Guard: intent contains actionable frame (en X jours, for X days, minutes par jour, etc.) => no intercept */
 const GUARD_ACTIONABLE_FRAME =
-  /\d+\s*(jours?|days?|mois|months?|semaines?|weeks?|minutes?|heures?|hours?|min\s*\/\s*jour|per\s*day)|(en|in)\s+\d+\s*(jours?|days?|mois|months?)/i;
+  /\d+\s*(jours?|days?|mois|months?|semaines?|weeks?|minutes?|heures?|hours?|min\s*\/\s*jour|per\s*day)|(en|in|for)\s+\d+\s*(jours?|days?|mois|months?)|(write|ship|learn|speak|improve|build|create|prepare)\s+.*\s+(in|en|for)\s+\d+/i;
 
 /** Guard: intent contains concrete learning/training verb => no intercept */
 const GUARD_LEARNING_VERB =
@@ -40,7 +40,9 @@ const ELITE_OR_SUPERLATIVE_PATTERNS: Array<{ re: RegExp; marker: string; langHin
   { re: /\b(le\s+)?meilleur\b/i, marker: 'meilleur', langHint: 'fr' },
   { re: /\bcélèbre\b/i, marker: 'célèbre', langHint: 'fr' },
   { re: /\b(devenir|être)\s+star\b/i, marker: 'star', langHint: 'fr' },
-  // EN — elite roles
+  // EN — elite roles / selection
+  { re: /\bget\s+accepted\s+to\s+(harvard|stanford|mit|ivy\s+league)\b/i, marker: 'get accepted', langHint: 'en' },
+  { re: /\b(harvard|stanford|mit|ivy\s+league)\b/i, marker: 'elite institution', langHint: 'en' },
   { re: /\bbecome\s+(a\s+)?(president|billionaire|millionaire|world\s+champion|CEO|prime\s+minister|astronaut)\b/i, marker: 'become', langHint: 'en' },
   { re: /\b(president|billionaire|world\s+champion)\s+(of\s+the\s+)?(country|world)?\b/i, marker: 'president/billionaire', langHint: 'en' },
   { re: /\bwin\s+(a\s+)?(nobel|oscar)\b/i, marker: 'win nobel/oscar', langHint: 'en' },

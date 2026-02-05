@@ -1,0 +1,275 @@
+/* Community ritual card — Inspiration tab only. No "Le modifier", only Rejoindre. */
+.card {
+  background: var(--loe-color-background);
+  border: 1px solid var(--loe-color-border-light);
+  border-radius: var(--loe-radius-sm);
+  padding: 0;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  width: 100%;
+  box-shadow: var(--loe-shadow-card);
+  overflow: hidden;
+  transition: box-shadow 200ms ease;
+}
+
+.card:hover {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.thumb {
+  position: relative;
+  border-radius: var(--loe-radius-sm) var(--loe-radius-sm) 0 0;
+  overflow: hidden;
+  background: var(--loe-color-surface);
+  aspect-ratio: 16 / 9;
+  min-width: 0;
+  width: 100%;
+}
+
+.thumbImage {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  object-fit: cover;
+  transition: transform 300ms ease;
+}
+
+.card:hover .thumbImage {
+  transform: scale(1.06);
+}
+
+.chipsRow {
+  position: absolute;
+  top: var(--loe-space-xs);
+  left: var(--loe-space-xs);
+  right: var(--loe-space-xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--loe-space-xs);
+  z-index: 1;
+}
+
+.chip {
+  padding: 4px var(--loe-space-sm);
+  border-radius: var(--loe-radius-pill);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--loe-color-text);
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-medium);
+  line-height: 1.2;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chipIcon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.ratingChip {
+  position: absolute;
+  top: var(--loe-space-xs);
+  right: var(--loe-space-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px var(--loe-space-sm);
+  border-radius: var(--loe-radius-pill);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--loe-color-text);
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-semibold);
+  z-index: 1;
+}
+
+.ratingStar {
+  color: #eab308;
+}
+
+.cardBody {
+  padding: var(--loe-space-md);
+  display: grid;
+  gap: var(--loe-space-sm);
+}
+
+.title {
+  font-weight: var(--loe-font-weight-semibold);
+  font-size: var(--loe-font-size-base);
+  color: var(--loe-color-text-secondary);
+  line-height: var(--loe-line-height-tight);
+  margin: 0;
+}
+
+.description {
+  font-size: var(--loe-font-size-sm);
+  color: var(--loe-color-muted-light);
+  line-height: var(--loe-line-height-normal);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Espace entre la ligne "Progression communauté" + % et la barre : max 17px */
+.progressSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.progressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--loe-space-sm);
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.progressLabel {
+  font-size: var(--loe-font-size-xs);
+  color: var(--loe-color-muted-light);
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.progressSection .progressBar {
+  margin-top: 0;
+}
+
+.progressPct {
+  font-size: var(--loe-font-size-xs);
+  font-weight: var(--loe-font-weight-medium);
+  color: var(--loe-color-accent-purple);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.progressBar {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--loe-radius-pill);
+  background: var(--loe-color-progress-track);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: var(--loe-radius-pill);
+  background: linear-gradient(90deg, #ec4899, var(--loe-color-accent-purple-light));
+  transition: width 180ms ease;
+}
+
+.participantsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--loe-space-sm);
+  font-size: var(--loe-font-size-xs);
+  color: var(--loe-color-muted-light);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.participantsRow .joinBtn {
+  margin-left: auto;
+}
+
+.participantsAvatars {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.participantAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--loe-color-surface-muted);
+  border: 2px solid var(--loe-color-background);
+  margin-left: -8px;
+  flex-shrink: 0;
+}
+
+.participantAvatar:first-of-type {
+  margin-left: 0;
+}
+
+.participantAvatarWrap {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--loe-color-background);
+  margin-left: -8px;
+}
+
+.participantAvatarWrap:first-of-type {
+  margin-left: 0;
+}
+
+.participantAvatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  aspect-ratio: 1;
+}
+
+.participantsMore {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin-left: -8px;
+  background: var(--loe-color-surface-muted);
+  border: 2px solid var(--loe-color-background);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: var(--loe-font-weight-semibold);
+  color: var(--loe-color-muted-light);
+  flex-shrink: 0;
+}
+
+.participantsCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.participantsIcon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.8;
+}
+
+.joinBtn {
+  padding: var(--loe-space-sm) var(--loe-space-lg);
+  border-radius: var(--loe-radius-sm);
+  font-size: var(--loe-font-size-sm);
+  font-weight: var(--loe-font-weight-semibold);
+  background: var(--loe-color-accent-purple);
+  color: var(--loe-color-white);
+  border: none;
+  cursor: pointer;
+  transition: opacity 150ms ease, transform 100ms ease;
+}
+
+.joinBtn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.joinBtn:focus-visible {
+  outline: 2px solid var(--loe-color-accent-purple-light);
+  outline-offset: 2px;
+}

@@ -1,0 +1,11 @@
+{
+  "name": "objectives_preview_v1",
+  "version": "1.0.0",
+  "purpose_en": "Preview 1-3 precise objectives for the confirmation screen, in intent language.",
+  "token_budget_target": 120,
+  "safety_notes_en": "Output only short objectives; no harmful content.",
+  "system": "You output a JSON object with an array of 1-3 short objectives the user will achieve, in the SAME language as the intent. Each objective is one short phrase (e.g. 'commander au restaurant', 'poser 5 questions'). If the goal is very broad, output one summary phrase. No bullets in the text. Output valid JSON only.",
+  "user_template": "Intent: \"{{intent}}\". Language: {{intent_lang}}. Days: {{days}}. Give 1-3 precise objectives (short phrases) the user will reach. Same language as intent. Reply with JSON: {\"objectives\": [string]}",
+  "input_schema": { "intent": "string", "intent_lang": "string", "days": "number" },
+  "output_schema": { "objectives": "array" }
+}

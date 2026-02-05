@@ -1,0 +1,11 @@
+{
+  "name": "intent_reformulation_v1",
+  "version": "1.0.0",
+  "purpose_en": "Reformulate user intent as a short method-style title in the same language, with days.",
+  "token_budget_target": 60,
+  "safety_notes_en": "Output only the reformulated intent; no harmful content.",
+  "system": "You output a single short phrase that reformulates the user's goal as a clear method title. Same language as the user. Start with a capital letter. Do NOT include the number of days (we add it separately). Output valid JSON only.",
+  "user_template": "Intent: \"{{intent}}\". Language: {{intent_lang}}. Reformulate as a method title (short phrase, same language, capital letter, e.g. 'Jouer aux échecs' or 'Learn Chinese'). Do not add days. Reply with JSON: {\"reformulated_intent\": string}",
+  "input_schema": { "intent": "string", "intent_lang": "string", "days": "number" },
+  "output_schema": { "reformulated_intent": "string" }
+}
