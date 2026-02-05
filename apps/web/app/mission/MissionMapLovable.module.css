@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Poppins:wght@500;600;700;800&display=swap');
 
 .root {
-  --background: hsl(220, 30%, 8%);
+  --background: #fff;
   --foreground: hsl(45, 100%, 97%);
   --card: hsla(220, 25%, 12%, 0.95);
   --card-foreground: hsl(45, 100%, 97%);
@@ -48,13 +48,14 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0.5;
   transition: opacity 0.7s ease-in-out;
 }
 
 .backgroundOverlay {
   position: absolute;
   inset: 0;
-  background: hsla(0, 0%, 100%, 0.6);
+  background: transparent;
 }
 
 .header {
@@ -69,7 +70,7 @@
   justify-content: center;
   gap: 8px;
   padding: 12px 16px 10px;
-  background: rgba(23, 28, 38, 0.53);
+  background: rgba(23, 28, 38, 0.9);
 }
 
 .headerRow {
@@ -182,7 +183,7 @@
 
 .progressBar {
   flex: 1;
-  height: 12px;
+  height: 8px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
   overflow: hidden;
@@ -190,7 +191,7 @@
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, hsl(51.9deg 55% 57%) 0%, var(--accent) 100%);
+  background: linear-gradient(90deg, #f25aa6, #ffc94d);
   border-radius: 4px;
   transition: width 0.5s ease-out;
 }
@@ -276,7 +277,7 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  background-color: hsl(220deg 25% 12% / 53%);
+  background-color: rgba(23, 28, 38, 0.9);
 }
 
 .bottomNavItem {
@@ -402,14 +403,14 @@
 .stepLabel {
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(10, 12, 16, 0.35);
+  background: rgba(10, 12, 16, 0);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #fff;
-  font-weight: 500;
+  color: #000;
+  font-weight: 700;
   font-size: 12px;
   line-height: 1.2;
   max-width: 260px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  text-shadow: none;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -422,8 +423,8 @@
 }
 
 .stepLabelActive {
-  background: rgba(10, 12, 16, 0.42);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(250, 250, 250, 0.3);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .stepLabelLocked {
