@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Tabs } from '@loe/ui';
 import styles from './RitualHistory.module.css';
@@ -14,8 +14,10 @@ import { CATEGORY_IDS } from '../lib/taxonomy/categories';
 import {
   buildRitualStorageKey,
   RITUAL_INDEX_KEY,
+  setRitualIdMapEntry,
   type RitualIndexItem,
 } from '../lib/rituals/inProgress';
+import { buildMissionUrl } from '../lib/missionUrl';
 
 type RitualTab = 'in_progress' | 'mine' | 'community';
 
@@ -51,6 +53,119 @@ type RitualHistoryProps = {
 /** localStorage key: loe.used_idea_routines.<ui_locale>.<category> → JSON array of idea routine IDs. */
 const USED_IDEAS_KEY_PREFIX = 'loe.used_idea_routines.';
 const IDEA_CHIPS_COUNT = 4;
+
+const parseDate = (value?: string | null) => {
+  if (!value) return 0;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+const buildLocalItems = (tab: RitualTab): RitualCardItem[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(RITUAL_INDEX_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as RitualIndexItem[];
+    const filtered = (parsed ?? []).filter((entry) => {
+      if (entry.hidden) return false;
+      if (tab === 'mine') {
+        return entry.createdBy == null;
+      }
+      return entry.status !== 'completed';
+    });
+    return filtered
+      .map((entry) => ({
+        id: entry.ritualId,
+        title: entry.pathTitle ?? entry.intention ?? 'Rituel',
+        imageUrl: null,
+        lastViewedAt:
+          entry.lastViewedAt ?? entry.lastOpenedAt ?? entry.updatedAt ?? entry.createdAt ?? null,
+        status: entry.status ?? 'ready',
+        createdBy: entry.createdBy ?? null,
+      }))
+      .filter((entry) => entry.id)
+      .sort((a, b) => parseDate(b.lastViewedAt) - parseDate(a.lastViewedAt));
+  } catch {
+    return [];
+  }
+};
+
+const mergeRitualItems = (localItems: RitualCardItem[], remoteItems: RitualCardItem[]) => {
+  const map = new Map<string, RitualCardItem>();
+  localItems.forEach((item) => map.set(item.id, item));
+  remoteItems.forEach((item) => map.set(item.id, item));
+  return Array.from(map.values()).sort((a, b) => parseDate(b.lastViewedAt) - parseDate(a.lastViewedAt));
+};
+
+const clearImageCacheForRitualId = (ritualId: string) => {
+  const suffix = `ritual_${ritualId}`;
+  Object.keys(window.localStorage).forEach((key) => {
+    if (!key.startsWith('loe_img_')) return;
+    if (!key.includes(suffix)) return;
+    window.localStorage.removeItem(key);
+  });
+};
+
+const purgeIncompleteRitualCaches = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    const rawIndex = window.localStorage.getItem(RITUAL_INDEX_KEY);
+    if (!rawIndex) return;
+    const parsed = JSON.parse(rawIndex) as RitualIndexItem[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return;
+    const remaining: RitualIndexItem[] = [];
+    const removedIds: string[] = [];
+    parsed.forEach((entry) => {
+      const ritualId = entry.ritualId;
+      if (!ritualId) return;
+      let status = entry.status;
+      const rawRecord = window.localStorage.getItem(buildRitualStorageKey(ritualId));
+      if (rawRecord) {
+        try {
+          const record = JSON.parse(rawRecord) as RitualIndexItem;
+          status = record.status ?? status;
+        } catch {
+          // ignore
+        }
+      }
+      if (status === 'ready' || status === 'generating') {
+        remaining.push(entry);
+        return;
+      }
+      if (status === 'completed') {
+        remaining.push(entry);
+        return;
+      }
+      if (status !== 'error') {
+        remaining.push(entry);
+        return;
+      }
+      removedIds.push(ritualId);
+    });
+
+    if (removedIds.length === 0) return;
+
+    window.localStorage.setItem(RITUAL_INDEX_KEY, JSON.stringify(remaining));
+    removedIds.forEach((ritualId) => {
+      window.localStorage.removeItem(buildRitualStorageKey(ritualId));
+      const rawMission = window.localStorage.getItem('loe.missionData');
+      if (rawMission) {
+        try {
+          const missionData = JSON.parse(rawMission) as { ritualId?: string };
+          if (missionData?.ritualId === ritualId) {
+            window.localStorage.removeItem('loe.missionData');
+          }
+        } catch {
+          // ignore
+        }
+      }
+      clearImageCacheForRitualId(ritualId);
+      removeCachedImage(`ritual_${ritualId}`);
+    });
+  } catch {
+    // ignore
+  }
+};
 
 function getUsedIdeaIds(uiLocale: string, category: IdeaRoutineCategory): string[] {
   if (typeof window === 'undefined') return [];
@@ -119,6 +234,7 @@ export default function RitualHistory({
   const [inspirationLoading, setInspirationLoading] = useState(false);
   /** En Mock UI ON : URLs des images réelles (data/images/) pour les cartes. */
   const [dataImageUrls, setDataImageUrls] = useState<string[]>([]);
+  const hasPurgedRef = useRef(false);
 
   /** After tab switch: trigger enter animation (fade in + slide up) on next frame. */
   useEffect(() => {
@@ -155,12 +271,13 @@ export default function RitualHistory({
           throw new Error('list_failed');
         }
         const payload = (await response.json()) as ListResponse;
-        setItems((prev) =>
-          reset ? payload.items ?? [] : [...prev, ...(payload.items ?? [])],
-        );
+        const localItems = tab === 'community' ? [] : buildLocalItems(tab);
+        const remoteItems = payload.items ?? [];
+        const nextItems = reset ? mergeRitualItems(localItems, remoteItems) : null;
+        setItems((prev) => (reset ? nextItems ?? [] : [...prev, ...remoteItems]));
         setNextCursor(payload.nextCursor ?? null);
         if (typeof payload.total === 'number') {
-          setTotal(payload.total);
+          setTotal(reset ? (nextItems?.length ?? payload.total) : payload.total);
         }
       } catch {
         if (reset) {
@@ -184,12 +301,32 @@ export default function RitualHistory({
       setLoading(false);
       return;
     }
+    if (!hasPurgedRef.current) {
+      purgeIncompleteRitualCaches();
+      hasPurgedRef.current = true;
+    }
     const limit = expanded ? EXPANDED_LIMIT : COLLAPSED_LIMIT;
     fetchPage({ tab: activeTab, limit, cursor: null, reset: true });
   }, [mockTabData, activeTab, expanded, fetchPage]);
 
   useEffect(() => {
     loadInitial();
+  }, [loadInitial]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      loadInitial();
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== RITUAL_INDEX_KEY) return;
+      loadInitial();
+    };
+    window.addEventListener('loe:rituals:refresh', handleRefresh);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('loe:rituals:refresh', handleRefresh);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [loadInitial]);
 
   useEffect(() => {
@@ -311,7 +448,7 @@ export default function RitualHistory({
 
   const openRitualInMission = (ritualId: string) => {
     if (typeof window === 'undefined') {
-      router.push('/mission?start=1&ready=1');
+      router.push('/');
       return;
     }
     try {
@@ -346,12 +483,21 @@ export default function RitualHistory({
             }),
           );
         }
+        setRitualIdMapEntry(record.ritualId);
+        router.push(
+          buildMissionUrl({
+            ritualId: record.ritualId,
+            intention: record.intention,
+            days: record.days,
+          }),
+        );
+        return;
       }
       window.sessionStorage.setItem('loe.active_ritual_id', ritualId);
     } catch {
       // ignore
     }
-    router.push('/mission?start=1&ready=1');
+    router.push('/');
   };
 
   const handleRemove = async (ritualId: string) => {

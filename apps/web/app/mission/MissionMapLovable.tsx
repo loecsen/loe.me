@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, SyntheticEvent } from 'react';
 import styles from './MissionMapLovable.module.css';
 
 type StepState = 'completed' | 'active' | 'locked';
@@ -24,28 +25,23 @@ type MissionMapLovableProps = {
   completedCount: number;
   totalCount: number;
   currentStepTitle: string | null;
+  preparing?: boolean;
+  preparingStatus?: 'pending' | 'ready' | 'error';
   onStepClick: (levelId: string, stepId: string) => void;
   onOpenNotifications: () => void;
   onCloseMission: () => void;
 };
 
 const BG_IMAGES = [
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/842b0955-92b0-4ff2-ab71-6a78cda96902/SDXL_09_In_a_quaint_village_bordering_lush_countryside_a_woman_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/e75834a0-e0af-42a6-aace-2dfae638e36e/SDXL_09_In_a_large_park_a_woman_is_walking_with_a_child_Faces_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/d8f44f9f-10e9-42c2-9c88-273ddca2bbaf/Leonardo_Diffusion_XL_Flowers_SmellIn_summer_it_is_very_hotMan_2.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/b75adb61-17d1-4c4d-ab2c-1d8cad5af7f6/Leonardo_Diffusion_XL_young_and_smily_Students_chat_in_a_moder_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/4784287b-fd42-49ed-bf8d-fab754c6e4eb/Leonardo_Diffusion_XL_In_a_large_park_a_woman_is_walking_with_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/49e4ed6c-d4eb-4cd7-9ad2-f4c3a35365b7/SDXL_09_Two_people_chat_by_the_pool_during_an_evening_in_a_vil_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/6d221974-a02c-4cf5-b4b1-e750bb008af3/SDXL_09_Drawing_of_a_quaint_cottage_garden_in_Bath_a_woman_lov_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/3187a7e4-e8f8-49be-bd56-c7e5101380fb/SDXL_09_A_group_of_friends_enjoy_vibrant_parties_in_a_stylish_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/8002c11e-482d-4d67-ae9e-96b15f5e359f/SDXL_09_In_the_lush_gardens_of_Seattle_a_mans_hobby_has_blosso_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/3090c009-6de2-4cd0-b619-62b8339b7dca/SDXL_09_a_man_explores_a_new_imaginary_distant_planet_Faces_mu_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/0e60c218-f93f-41eb-b3ec-b18281829a47/SDXL_09_In_a_sunlit_Miami_beach_park_a_man_entertained_onlooke_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/f487ad24-cb07-4484-a5cf-f54df2350fc0/SDXL_09_Drawing_of_2_women_enjoy_the_warm_sunset_in_a_Chicago_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/fbdf2642-b9ca-4544-ba81-ebae28f0c605/Leonardo_Diffusion_XL_In_a_quaint_village_bordering_lush_count_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/112e3ca9-443c-40b5-b3aa-20cd10e5dabf/SDXL_09_In_a_sunny_countryside_near_Austin_a_woman_admires_a_m_0.jpg',
-  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/b0771153-e4b4-47fc-a065-3b4c184009c0/SDXL_09_In_a_quaint_village_bordering_lush_countryside_a_woman_0.jpg',
+  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/1331d11b-9e1b-4281-ace4-2e1270f0ef52/Default_un_homme_malade_est_dans_son_lit_on_voir_la_mer_de_sa_0.jpg',
+  'https://cdn.leonardo.ai/users/7319327d-11c2-493f-9613-0de3fd12b792/generations/731ce422-6bfd-4fd2-9bf2-0d685dbd382d/SDXL_09_A_man_leisurely_paddled_a_canoe_across_the_serene_lake_0.jpg',
 ];
+
+const BG_IMAGES_PROXY = BG_IMAGES.map(
+  (url) => `/api/images/proxy?url=${encodeURIComponent(url)}`,
+);
+
+const PLACEHOLDER_LABEL = 'Mission en création…';
 
 function hashString(input: string): number {
   let hash = 0;
@@ -104,15 +100,36 @@ export default function MissionMapLovable({
   completedCount,
   totalCount,
   currentStepTitle,
+  preparing,
+  preparingStatus,
   onStepClick,
   onOpenNotifications,
   onCloseMission,
 }: MissionMapLovableProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const pathContainerRef = useRef<HTMLDivElement | null>(null);
+  const stepsContainerRef = useRef<HTMLDivElement | null>(null);
+  const colorCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [activeBgIndex, setActiveBgIndex] = useState(0);
   const [nextBgIndex, setNextBgIndex] = useState<number | null>(null);
+  const [nextBgReady, setNextBgReady] = useState(false);
+  const [whichLayerOn, setWhichLayerOn] = useState(0);
+  const [layerIndices, setLayerIndices] = useState<[number, number]>([0, 0]);
+  const bgLoadedRef = useRef<Set<number>>(new Set([0]));
+  const nextBgIndexRef = useRef<number | null>(null);
+  const isTransitioningRef = useRef(false);
+  const zoneVisibilityRef = useRef<Map<Element, { ratio: number; index: number }>>(new Map());
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  const [pathData, setPathData] = useState({ d: '', width: 0, height: 0 });
+  const [barGradientTop, setBarGradientTop] = useState({
+    start: 'rgba(40, 44, 52, 0.65)',
+    end: 'rgba(40, 44, 52, 0.36)',
+  });
+  const [barGradientBottom, setBarGradientBottom] = useState({
+    start: 'rgba(40, 44, 52, 0.65)',
+    end: 'rgba(40, 44, 52, 0.36)',
+  });
   const toastTimeoutRef = useRef<number | null>(null);
 
   const totalSteps = useMemo(
@@ -126,31 +143,34 @@ export default function MissionMapLovable({
 
   const stepStatusMap = useMemo(() => {
     const map = new Map<string, StepState>();
+    let foundFirstIncomplete = false;
     levels.forEach((level, levelIndex) => {
       level.steps.forEach((step, stepIndex) => {
         const progressStep = progressLevels[levelIndex]?.steps?.[stepIndex];
         const isCompleted = progressStep?.state === 'completed';
-        const isActive =
-          step.id === currentStepId || progressStep?.state === 'in_progress' || progressStep?.state === 'available';
-        map.set(step.id, isCompleted ? 'completed' : isActive ? 'active' : 'locked');
+        if (isCompleted) {
+          map.set(step.id, 'completed');
+        } else if (!foundFirstIncomplete) {
+          foundFirstIncomplete = true;
+          map.set(step.id, 'active');
+        } else {
+          map.set(step.id, 'locked');
+        }
       });
     });
     return map;
-  }, [levels, progressLevels, currentStepId]);
+  }, [levels, progressLevels]);
 
   const activeStepIndex = useMemo(() => {
     let index = 0;
-    let found = 0;
-    levels.forEach((level) => {
-      level.steps.forEach((step) => {
-        if (step.id === currentStepId) {
-          found = index + 1;
-        }
+    for (const level of levels) {
+      for (const step of level.steps) {
         index += 1;
-      });
-    });
-    return found;
-  }, [levels, currentStepId]);
+        if (stepStatusMap.get(step.id) === 'active') return index;
+      }
+    }
+    return 1;
+  }, [levels, stepStatusMap]);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -164,25 +184,179 @@ export default function MissionMapLovable({
   };
 
   useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      if (detail?.message) {
+        showToast(detail.message);
+      }
+    };
+    window.addEventListener('loe:mission:toast', handler as EventListener);
+    return () => window.removeEventListener('loe:mission:toast', handler as EventListener);
+  }, []);
+
+  const handleStepClick = (levelId: string, stepId: string, isLocked: boolean) => {
+    if (isLocked) {
+      const label = activeStepIndex > 0 ? activeStepIndex : 1;
+      showToast(`Terminer l’étape ${label} pour débloquer`);
+      return;
+    }
+    onStepClick(levelId, stepId);
+  };
+
+  const extractBarGradientFromImageUrl = (url: string) => {
+    const refHeight = 100;
+    const topPx = 85;
+    const bottomPx = 65;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (!w || !h) return;
+        const scale = refHeight / h;
+        const cw = Math.round(w * scale);
+        const ch = refHeight;
+        const topRows = Math.max(1, Math.round((topPx / h) * ch));
+        const bottomRows = Math.max(1, Math.round((bottomPx / h) * ch));
+
+        if (!colorCanvasRef.current) {
+          colorCanvasRef.current = document.createElement('canvas');
+        }
+        const canvas = colorCanvasRef.current;
+        canvas.width = cw;
+        canvas.height = ch;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return;
+
+        context.drawImage(img, 0, 0, cw, ch);
+
+        const sample = (y: number, rows: number) => {
+          const data = context.getImageData(0, y, cw, rows).data;
+          let r = 0;
+          let g = 0;
+          let b = 0;
+          const n = (data.length / 4) | 0;
+          for (let i = 0; i < n; i += 1) {
+            r += data[i * 4];
+            g += data[i * 4 + 1];
+            b += data[i * 4 + 2];
+          }
+          return {
+            r: Math.round(r / n),
+            g: Math.round(g / n),
+            b: Math.round(b / n),
+          };
+        };
+
+        const top = sample(0, topRows);
+        const bottom = sample(ch - bottomRows, bottomRows);
+
+        setBarGradientTop({
+          start: `rgba(${top.r}, ${top.g}, ${top.b}, 0.58)`,
+          end: `rgba(${top.r}, ${top.g}, ${top.b}, 0.27)`,
+        });
+        setBarGradientBottom({
+          start: `rgba(${bottom.r}, ${bottom.g}, ${bottom.b}, 0.58)`,
+          end: `rgba(${bottom.r}, ${bottom.g}, ${bottom.b}, 0.27)`,
+        });
+      } catch {
+        // Canvas tainted (CORS) : on garde la valeur par défaut.
+      }
+    };
+    const proxyUrl = `/api/images/proxy?url=${encodeURIComponent(url)}`;
+    const proxySeparator = proxyUrl.includes('?') ? '&' : '?';
+    img.src = `${proxyUrl}${proxySeparator}_t=${Date.now()}`;
+  };
+
+  const getBgSrc = (index: number) => BG_IMAGES_PROXY[index];
+
+  const preloadBg = (index: number) => {
+    if (bgLoadedRef.current.has(index)) {
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      bgLoadedRef.current.add(index);
+      if (nextBgIndexRef.current === index) {
+        setNextBgReady(true);
+      }
+    };
+    img.src = getBgSrc(index);
+  };
+
+  useEffect(() => {
+    extractBarGradientFromImageUrl(BG_IMAGES[activeBgIndex]);
+    const nextIndex = (activeBgIndex + 1) % BG_IMAGES.length;
+    preloadBg(nextIndex);
+  }, [activeBgIndex]);
+
+  useEffect(() => {
+    if (nextBgIndex == null) return;
+    const off = 1 - whichLayerOn;
+    setLayerIndices((prev) => {
+      const next: [number, number] = [...prev];
+      next[off] = nextBgIndex;
+      return next;
+    });
+  }, [nextBgIndex, whichLayerOn]);
+
+  useEffect(() => {
+    if (nextBgIndex == null) return;
+    nextBgIndexRef.current = nextBgIndex;
+    const isLoaded = bgLoadedRef.current.has(nextBgIndex);
+    setNextBgReady(isLoaded);
+    if (!isLoaded) {
+      preloadBg(nextBgIndex);
+    }
+  }, [nextBgIndex]);
+
+  useEffect(() => {
+    if (nextBgIndex == null || !nextBgReady) return;
+    if (!isTransitioningRef.current) {
+      isTransitioningRef.current = true;
+    }
+    const targetIndex = nextBgIndex;
+    requestAnimationFrame(() => {
+      setWhichLayerOn(1 - whichLayerOn);
+      setActiveBgIndex(targetIndex);
+      setNextBgIndex(null);
+      setNextBgReady(false);
+      isTransitioningRef.current = false;
+    });
+  }, [nextBgIndex, nextBgReady, whichLayerOn]);
+
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const sections = Array.from(container.querySelectorAll('[data-zone]'));
     if (!sections.length) return;
+    zoneVisibilityRef.current.clear();
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
           const zoneIndex = Number((entry.target as HTMLElement).dataset.zone ?? 0);
           const newIndex = zoneIndex % BG_IMAGES.length;
-          if (newIndex === activeBgIndex) return;
-          setNextBgIndex(newIndex);
-          window.setTimeout(() => {
-            setActiveBgIndex(newIndex);
-            setNextBgIndex(null);
-          }, 700);
+          if (!entry.isIntersecting) {
+            zoneVisibilityRef.current.delete(entry.target);
+            return;
+          }
+          zoneVisibilityRef.current.set(entry.target, { ratio: entry.intersectionRatio, index: newIndex });
         });
+        if (isTransitioningRef.current) return;
+        // Dès qu'une zone "suivante" apparaît en bas, on bascule : on prend la zone d'index max (la plus bas à l'écran)
+        let bestIndex: number | null = null;
+        zoneVisibilityRef.current.forEach((value) => {
+          if (bestIndex === null || value.index > bestIndex) {
+            bestIndex = value.index;
+          }
+        });
+        if (bestIndex === null) return;
+        if (bestIndex === activeBgIndex || bestIndex === nextBgIndex) return;
+        setNextBgIndex(bestIndex);
       },
-      { threshold: 0, rootMargin: '0px 0px -100px 0px' },
+      { threshold: 0, rootMargin: '0px 0px 150px 0px' },
     );
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
@@ -200,20 +374,94 @@ export default function MissionMapLovable({
     });
   }, [completedCount, currentStepId, levels]);
 
+  useEffect(() => {
+    const container = pathContainerRef.current;
+    if (!container) return;
+
+    const updatePath = () => {
+      const rect = container.getBoundingClientRect();
+      const getCenter = (element: Element | null) => {
+        if (!element) return null;
+        const elementRect = element.getBoundingClientRect();
+        return {
+          x: elementRect.left - rect.left + elementRect.width / 2,
+          y: elementRect.top - rect.top + elementRect.height / 2,
+        };
+      };
+
+      const startMarker = container.querySelector('[data-path-start="true"]');
+      const endMarker = container.querySelector('[data-path-end="true"]');
+      const stepNodes = Array.from(container.querySelectorAll('[data-step-id]'));
+      const stepPoints = stepNodes
+        .map((node) => {
+          const button = node.querySelector('button');
+          return getCenter(button);
+        })
+        .filter((point): point is { x: number; y: number } => Boolean(point));
+      const points = [
+        getCenter(startMarker),
+        ...stepPoints,
+        getCenter(endMarker),
+      ].filter((point): point is { x: number; y: number } => Boolean(point));
+
+      if (!points.length) {
+        setPathData({ d: '', width: rect.width, height: rect.height });
+        return;
+      }
+
+      let d = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length; i += 1) {
+        const prev = points[i - 1];
+        const next = points[i];
+        const midY = (prev.y + next.y) / 2;
+        d += ` C ${prev.x} ${midY} ${next.x} ${midY} ${next.x} ${next.y}`;
+      }
+
+      setPathData({ d, width: rect.width, height: rect.height });
+    };
+
+    const scheduleUpdate = () => requestAnimationFrame(updatePath);
+    scheduleUpdate();
+
+    const observer = new ResizeObserver(scheduleUpdate);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [levels, curvePattern, totalSteps]);
+
+  const rootStyle = {
+    '--bar-gradient-top-start': barGradientTop.start,
+    '--bar-gradient-top-end': barGradientTop.end,
+    '--bar-gradient-bottom-start': barGradientBottom.start,
+    '--bar-gradient-bottom-end': barGradientBottom.end,
+  } as CSSProperties;
+
   return (
-    <div className={styles.root}>
+    <div className={styles.root} style={rootStyle}>
       <div className={styles.background}>
-        <img className={styles.backgroundImg} src={BG_IMAGES[activeBgIndex]} alt="" />
-        <img
-          className={styles.backgroundImg}
-          src={nextBgIndex != null ? BG_IMAGES[nextBgIndex] : BG_IMAGES[activeBgIndex]}
-          alt=""
-          style={{ opacity: nextBgIndex != null ? 1 : 0 }}
+        <div
+          className={`${styles.bg} ${whichLayerOn === 0 ? styles.bgOn : ''}`}
+          style={{ backgroundImage: `url("${getBgSrc(layerIndices[0])}")` }}
+        />
+        <div
+          className={`${styles.bg} ${whichLayerOn === 1 ? styles.bgOn : ''}`}
+          style={{ backgroundImage: `url("${getBgSrc(layerIndices[1])}")` }}
         />
         <div className={styles.backgroundOverlay} />
       </div>
 
       <div className={styles.scrollArea} ref={containerRef}>
+        <div className={styles.pathWrapper} ref={pathContainerRef}>
+        {pathData.d && (
+          <svg
+            className={styles.pathLine}
+            viewBox={`0 0 ${pathData.width} ${pathData.height}`}
+            width={pathData.width}
+            height={pathData.height}
+            aria-hidden="true"
+          >
+            <path d={pathData.d} />
+          </svg>
+        )}
         <div className={styles.header}>
           <div className={styles.headerRow}>
             <div className={styles.headerIdentity}>
@@ -259,6 +507,32 @@ export default function MissionMapLovable({
           </div>
         </div>
 
+        {preparing && (
+          <div className={styles.preparingCard} role="status" aria-live="polite">
+            <div className={styles.preparingTitle}>Préparation de ta routine…</div>
+            <div className={styles.preparingSubtitle}>
+              Cela peut prendre plusieurs minutes selon la complexité.
+            </div>
+            <div className={styles.preparingSteps}>
+              <div className={`${styles.preparingStep} ${styles.preparingStepActive}`}>
+                <span className={styles.preparingDot} />
+                Analyse
+              </div>
+              <div className={styles.preparingStep}>
+                <span className={styles.preparingDot} />
+                Plan
+              </div>
+              <div className={styles.preparingStep}>
+                <span className={styles.preparingDot} />
+                Premières missions
+              </div>
+            </div>
+            {preparingStatus === 'error' ? (
+              <div className={styles.preparingError}>Un souci est survenu, on réessaie…</div>
+            ) : null}
+          </div>
+        )}
+
         {levels.map((level, levelIndex) => {
           const zoneStartIndex = levels.slice(0, levelIndex).reduce((acc, l) => acc + l.steps.length, 0);
           return (
@@ -275,10 +549,10 @@ export default function MissionMapLovable({
                 {level.summary && <p className={styles.zoneObjective}>{level.summary}</p>}
               </div>
 
-              <div className={styles.pathContainer}>
+                <div className={styles.pathContainer}>
                 {levelIndex === 0 && (
                   <div className={styles.marker}>
-                    <div className={`${styles.markerBadge} ${styles.markerStart}`}>
+                    <div className={`${styles.markerBadge} ${styles.markerStart}`} data-path-start="true">
                       <svg
                         className={styles.markerIcon}
                         xmlns="http://www.w3.org/2000/svg"
@@ -299,7 +573,7 @@ export default function MissionMapLovable({
                   </div>
                 )}
 
-                <div className={styles.stepsContainer}>
+                <div className={styles.stepsContainer} ref={stepsContainerRef}>
                   {level.steps.map((step, stepIndex) => {
                     const globalIndex = zoneStartIndex + stepIndex;
                     const offset = curvePattern[globalIndex] ?? 0;
@@ -307,6 +581,8 @@ export default function MissionMapLovable({
                     const isLocked = status === 'locked';
                     const isCompleted = status === 'completed';
                     const isActive = status === 'active';
+                    const labelText = step.title?.trim() || PLACEHOLDER_LABEL;
+                    const isPlaceholder = labelText === PLACEHOLDER_LABEL;
                     const className = `${styles.stepButton} ${
                       isCompleted ? styles.stepCompleted : isActive ? styles.stepActive : styles.stepLocked
                     }`;
@@ -320,20 +596,15 @@ export default function MissionMapLovable({
                           <button
                             type="button"
                             className={className}
-                            onClick={() => {
-                              if (isLocked) {
-                                const label = activeStepIndex > 0 ? activeStepIndex : 1;
-                                showToast(`Terminer l’étape ${label} pour débloquer`);
-                                return;
-                              }
-                              onStepClick(level.id, step.id);
-                            }}
+                            onClick={() => handleStepClick(level.id, step.id, isLocked)}
                           >
                             {isLocked ? (
                               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
                                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                               </svg>
+                            ) : isCompleted ? (
+                              <span className={styles.stepNumber}>{globalIndex + 1}</span>
                             ) : (
                               globalIndex + 1
                             )}
@@ -354,9 +625,18 @@ export default function MissionMapLovable({
                           <span
                             className={`${styles.stepLabel} ${
                               isCompleted ? styles.stepLabelCompleted : isActive ? styles.stepLabelActive : styles.stepLabelLocked
-                            }`}
+                            } ${isPlaceholder ? styles.stepLabelPlaceholder : ''}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleStepClick(level.id, step.id, isLocked)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleStepClick(level.id, step.id, isLocked);
+                              }
+                            }}
                           >
-                            {step.title}
+                            {labelText}
                           </span>
                         </div>
                       </div>
@@ -366,7 +646,7 @@ export default function MissionMapLovable({
 
                 {levelIndex === levels.length - 1 && (
                   <div className={styles.marker}>
-                    <div className={`${styles.markerBadge} ${styles.markerEnd}`}>
+                    <div className={`${styles.markerBadge} ${styles.markerEnd}`} data-path-end="true">
                       <svg
                         className={styles.markerIcon}
                         xmlns="http://www.w3.org/2000/svg"
@@ -390,6 +670,7 @@ export default function MissionMapLovable({
             </section>
           );
         })}
+        </div>
       </div>
 
       <div className={styles.minimap} aria-hidden="true">

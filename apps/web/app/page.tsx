@@ -20,6 +20,8 @@ import { tryLexiconAutobootstrap } from './lib/lexicon/autobootstrap';
 import { decideUiOutcome } from './lib/decision/uiOutcome';
 import { resolveCopyVariant } from './lib/gates/copyVariant';
 import { PipelinePromptsEditor } from './components/PipelinePromptsEditor';
+import { buildMissionUrl } from './lib/missionUrl';
+import { setRitualIdMapEntry } from './lib/rituals/inProgress';
 import styles from './page.module.css';
 
 const CONTROLLABILITY_CONFIDENCE_THRESHOLD = 0.75;
@@ -790,6 +792,8 @@ export default function HomePage() {
       chosenDomainId: string;
       createdAt: string;
     };
+    goalClarification?: GoalClarification;
+    realismAck?: boolean;
   }) => {
     if (typeof window === 'undefined') return false;
     try {
@@ -798,6 +802,62 @@ export default function HomePage() {
     } catch {
       return false;
     }
+  };
+
+  const startPendingMission = (payload: {
+    ritualId: string;
+    intention: string;
+    days: number;
+    locale?: string;
+    category?: string;
+    clarification?: {
+      originalIntention: string;
+      chosenLabel: string;
+      chosenDomainId: string;
+      chosenIntention?: string;
+      createdAt: string;
+    };
+    goalClarification?: GoalClarification;
+    realismAck?: boolean;
+  }) => {
+    const ok = storePendingRequest({
+      ritualId: payload.ritualId,
+      intention: payload.intention,
+      days: payload.days,
+      locale: payload.locale,
+      category: payload.category,
+      clarification: payload.clarification,
+      goalClarification: payload.goalClarification,
+      realismAck: payload.realismAck,
+    });
+    if (!ok) {
+      setSubmitError('Impossible de lancer la génération.');
+      setIsSubmitting(false);
+      return false;
+    }
+    setRitualIdMapEntry(payload.ritualId);
+    try {
+      window.sessionStorage.removeItem(PENDING_RESULT_KEY);
+    } catch {
+      // ignore
+    }
+    void fetch('/api/missions/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ritualId: payload.ritualId,
+        intention: payload.intention,
+        days: payload.days,
+        locale: payload.locale,
+        category: payload.category,
+        clarification: payload.clarification,
+        goal_clarification: payload.goalClarification,
+        realism_acknowledged: payload.realismAck ?? false,
+        skip_gates: true,
+      }),
+    });
+    router.push(buildMissionUrl(payload));
+    return true;
   };
 
   const proceedToMission = async (params: {
@@ -811,96 +871,22 @@ export default function HomePage() {
     const { intentionToSend, days, category, ritualId, realismAck, goalClarification } = params;
     resetUiMessages();
     setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/missions/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          intention: intentionToSend,
-          days,
-          locale,
-          ritualId,
-          category,
-          realism_acknowledged: realismAck,
-          goal_clarification: goalClarification,
-        }),
-      });
-      const data = await res.json();
-      const payload = data?.data ?? data;
-      if (data?.blocked && data?.clarification?.mode === 'inline' && data?.clarification?.type === 'safety') {
-        setLastSubmittedIntent(intentionToSend);
-        setInlineHintDbg((t as Record<string, string>).safetyInlineMessage ?? GateCopy.safetyBlockedMessage(), 'proceedToMission:safety');
-        setInlineHintSecondaryDbg((t as Record<string, string>).safetyInlineFallbackExample ?? GateCopy.safetyBlockedSecondary(), 'proceedToMission:safety');
-        setIsSubmitting(false);
-        return;
-      }
-      if (data?.blocked) {
-        setSubmitError(data.block_reason ?? data.reason_code ?? 'blocked');
-        setIsSubmitting(false);
-        return;
-      }
-      if (!res.ok) {
-        setSubmitError(data?.details ?? data?.error ?? 'error');
-        setIsSubmitting(false);
-        return;
-      }
-      if (payload?.needsClarification && payload?.clarification?.mode === 'inline' && USE_V2) {
-        if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
-          console.warn(
-            '[Home V2] generate returned needsClarification after PROCEED_TO_GENERATE — engine bug; do not show generic action+result hint.',
-            { intentionToSend: intentionToSend.slice(0, 60) },
-          );
-        }
-        setLastSubmittedIntent(intentionToSend);
-        const tRec = t as Record<string, string>;
-        setInlineHintDbg(
-          payload.clarification?.question ?? tRec.inlineClarifyHint ?? 'Please clarify your goal.',
-          'proceedToMission:needsClarification_v2',
-        );
-        setInlineHintSecondaryDbg(null, 'proceedToMission:needsClarification_v2');
-        setLastSubmitDebug({
-          branch: 'proceedToMission:needsClarification_v2',
-          gateStatus: 'ACTIONABLE',
-          categoryInferred: payload?.category ?? category,
-          engine: 'v2',
-          fallback_to_legacy: false,
-          generateNeedsClarification: true,
-        });
-        setIsSubmitting(false);
-        return;
-      }
-      if (payload?.path && payload?.missionStubs) {
-        const ok = storePendingRequest({
-          ritualId,
-          intention: intentionToSend,
-          days,
-          locale,
-          category: payload?.category ?? category,
-        });
-        if (ok && typeof window !== 'undefined') {
-          try {
-            const toStore = { ...payload, debugTrace: data?.debugTrace };
-            window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(toStore));
-          } catch {
-            /* ignore */
-          }
-        }
-        const ideaIdToMark = pendingIdeaIdRef.current;
-        if (ideaIdToMark) {
-          pendingIdeaIdRef.current = null;
-          setIdeaIdUsedForRitual(ideaIdToMark);
-          setTimeout(() => setIdeaIdUsedForRitual(null), 500);
-        }
-        setIsSubmitting(false);
-        router.push(`/mission?creating=1&ritualId=${ritualId}`);
-      } else {
-        setSubmitError('Impossible de lancer la génération.');
-        setIsSubmitting(false);
-      }
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'error');
-      setIsSubmitting(false);
+    const ideaIdToMark = pendingIdeaIdRef.current;
+    if (ideaIdToMark) {
+      pendingIdeaIdRef.current = null;
+      setIdeaIdUsedForRitual(ideaIdToMark);
+      setTimeout(() => setIdeaIdUsedForRitual(null), 500);
     }
+    startPendingMission({
+      ritualId,
+      intention: intentionToSend,
+      days,
+      locale,
+      category,
+      goalClarification,
+      realismAck,
+    });
+    setIsSubmitting(false);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1588,66 +1574,25 @@ export default function HomePage() {
           if (realismLevel === 'stretch' && realismWhy) {
             setStretchMessage(realismWhy);
           }
-          const res = await fetch('/api/missions/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              intention: intentionToSend,
-              days: finalDays,
-              locale,
-              ritualId,
-              category: classifyData.category ?? undefined,
-              realism_acknowledged: false,
-            }),
+          startPendingMission({
+            ritualId,
+            intention: intentionToSend,
+            days: finalDays,
+            locale,
+            category: classifyData.category ?? undefined,
+            realismAck: false,
           });
-          const data = await res.json();
-          const payload = data?.data ?? data;
-          if (data?.blocked && data?.clarification?.mode === 'inline' && data?.clarification?.type === 'safety') {
-            setLastSubmittedIntent(trimmed);
-            setInlineHintDbg((t as Record<string, string>).safetyInlineMessage ?? GateCopy.safetyBlockedMessage(), 'BORDERLINE:generate:safety');
-            setInlineHintSecondaryDbg((t as Record<string, string>).safetyInlineFallbackExample ?? GateCopy.safetyBlockedSecondary(), 'BORDERLINE:generate:safety');
-            setIsSubmitting(false);
-            return;
-          }
-          if (data?.blocked) {
-            setSubmitError(data.block_reason ?? data.reason_code ?? 'blocked');
-            setIsSubmitting(false);
-            return;
-          }
-          if (!res.ok) {
-            setSubmitError(data?.details ?? data?.error ?? 'error');
-            setIsSubmitting(false);
-            return;
-          }
-          if (payload?.path && payload?.missionStubs) {
-            const ok = storePendingRequest({
-              ritualId,
-              intention: intentionToSend,
-              days: finalDays,
-              locale,
-              category: payload?.category,
-            });
-            if (ok && typeof window !== 'undefined') {
-              try {
-                const toStore = { ...payload, debugTrace: data?.debugTrace };
-                window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(toStore));
-              } catch {
-                /* ignore */
-              }
-            }
-            setLastSubmitDebug({
-              branch: 'proceed',
-              gateStatus: 'BORDERLINE',
-              reason_code: classifyData.reason_code,
-              lifeGoalHit: false,
-              classifyVerdict: classifyData.verdict,
-              classifyCategory: classifyData.category ?? undefined,
-              ...legacyDebugExtras,
-            });
-            setIsSubmitting(false);
-            router.push(`/mission?creating=1&ritualId=${ritualId}`);
-            return;
-          }
+          setLastSubmitDebug({
+            branch: 'proceed',
+            gateStatus: 'BORDERLINE',
+            reason_code: classifyData.reason_code,
+            lifeGoalHit: false,
+            classifyVerdict: classifyData.verdict,
+            classifyCategory: classifyData.category ?? undefined,
+            ...legacyDebugExtras,
+          });
+          setIsSubmitting(false);
+          return;
         }
         setLastSubmittedIntent(trimmed);
         const inlineMessage = getClassifyInlineMessage(classifyData);
@@ -1732,98 +1677,23 @@ export default function HomePage() {
       if (softRealism.level === 'stretch' && softRealism.why_short) {
         setStretchMessage(softRealism.why_short);
       }
-      const res = await fetch('/api/missions/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          intention: intentionToSend,
-          days: finalDays,
-          locale,
-          ritualId,
-          category: gate.category ?? undefined,
-          realism_acknowledged: false,
-        }),
+      startPendingMission({
+        ritualId,
+        intention: intentionToSend,
+        days: finalDays,
+        locale,
+        category: gate.category ?? undefined,
+        realismAck: false,
       });
-      const data = await res.json();
-      const payload = data?.data ?? data;
-      if (payload?.needsClarification && payload?.clarification?.mode === 'inline') {
-        setLastSubmittedIntent(trimmed);
-        setInlineHintSecondaryDbg(null, 'generate:needsClarification');
-        const reasonCode = payload.clarification?.reason_code;
-        const tRec = t as Record<string, string>;
-        const hint =
-          gate.status === 'ACTIONABLE'
-            ? tRec.inlineClarifyHintSingleTerm ?? tRec.inlineClarifyHint
-            : reasonCode === 'single_term'
-              ? tRec.inlineClarifyHintSingleTerm ?? tRec.inlineClarifyHint
-              : tRec.inlineClarifyHint;
-        setInlineHintDbg(hint, 'generate:needsClarification');
-        const branch = gate.status === 'ACTIONABLE' ? 'clarification_requested' : 'inline_hint';
-        setLastSubmitDebug({
-          branch,
-          gateStatus: gate.status,
-          reason_code: actionabilityResult.reason_code,
-          lifeGoalHit: false,
-          categoryInferred,
-          generateNeedsClarification: true,
-          ...legacyDebugExtras,
-        });
-        setIsSubmitting(false);
-        return;
-      }
-      if (data?.blocked && data?.clarification?.mode === 'inline' && data?.clarification?.type === 'safety') {
-        setLastSubmittedIntent(trimmed);
-        setInlineHintDbg((t as Record<string, string>).safetyInlineMessage ?? GateCopy.safetyBlockedMessage(), 'generate:safety');
-        setInlineHintSecondaryDbg((t as Record<string, string>).safetyInlineFallbackExample ?? GateCopy.safetyBlockedSecondary(), 'generate:safety');
-        const branch = gate.status === 'ACTIONABLE' ? 'safety_inline' : 'inline_hint';
-        setLastSubmitDebug({
-          branch,
-          gateStatus: gate.status,
-          reason_code: actionabilityResult.reason_code,
-          lifeGoalHit: false,
-          ...legacyDebugExtras,
-        });
-        setIsSubmitting(false);
-        return;
-      }
-      if (data?.blocked) {
-        setSubmitError(data.block_reason ?? data.reason_code ?? 'blocked');
-        setIsSubmitting(false);
-        return;
-      }
-      if (!res.ok) {
-        setSubmitError(data?.details ?? data?.error ?? 'error');
-        setIsSubmitting(false);
-        return;
-      }
-      if (payload?.path && payload?.missionStubs) {
-        const ok = storePendingRequest({
-          ritualId,
-          intention: intentionToSend,
-          days: finalDays,
-          locale,
-          category: payload?.category,
-        });
-        if (ok && typeof window !== 'undefined') {
-          try {
-            const toStore = { ...payload, debugTrace: data?.debugTrace };
-            window.sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(toStore));
-          } catch {
-            /* ignore */
-          }
-        }
-        setLastSubmitDebug({
-          branch: 'proceed',
-          gateStatus: gate.status,
-          reason_code: actionabilityResult.reason_code,
-          lifeGoalHit: false,
-          ...legacyDebugExtras,
-        });
-        setIsSubmitting(false);
-        router.push(`/mission?creating=1&ritualId=${ritualId}`);
-        return;
-      }
-      setSubmitError('Impossible de lancer la génération.');
+      setLastSubmitDebug({
+        branch: 'proceed',
+        gateStatus: gate.status,
+        reason_code: actionabilityResult.reason_code,
+        lifeGoalHit: false,
+        ...legacyDebugExtras,
+      });
+      setIsSubmitting(false);
+      return;
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'error');
     }
@@ -1969,15 +1839,13 @@ export default function HomePage() {
                           type="button"
                           className={styles.ambitionPrimary}
                           onClick={() => {
-                            setConfirmBeforeProceed({
-                              intentionToSend: ambitionPending.intent,
-                              originalIntent: ambitionPending.intent,
+                            startPendingMission({
                               ritualId: ambitionPending.ritualId,
+                              intention: ambitionPending.intent,
                               days: ambitionPending.days,
-                              category: undefined,
+                              locale,
                             });
                             setAmbitionPending(null);
-                            setIntention('');
                           }}
                           disabled={isSubmitting}
                         >
@@ -2024,15 +1892,13 @@ export default function HomePage() {
                             onClick={() => {
                               const days = angle.days ?? controllabilityPending.days;
                               setLastSubmitReformulation({ text: angle.intent, days });
-                              setConfirmBeforeProceed({
-                                intentionToSend: angle.intent,
-                                originalIntent: controllabilityPending.originalIntent,
+                              startPendingMission({
                                 ritualId: controllabilityPending.ritualId,
+                                intention: angle.intent,
                                 days,
-                                category: undefined,
+                                locale,
                               });
                               setControllabilityPending(null);
-                              setIntention(angle.label);
                             }}
                             disabled={isSubmitting}
                           >
@@ -2054,16 +1920,13 @@ export default function HomePage() {
                               days,
                               includesDays: controllabilityPending.reformulationIncludesDays,
                             });
-                            setConfirmBeforeProceed({
-                              intentionToSend,
-                              originalIntent: controllabilityPending.originalIntent,
+                            startPendingMission({
                               ritualId: controllabilityPending.ritualId,
+                              intention: intentionToSend,
                               days,
-                              category: undefined,
-                              reformulationIncludesDays: controllabilityPending.reformulationIncludesDays,
+                              locale,
                             });
                             setControllabilityPending(null);
-                            setIntention(intentionToSend);
                           }}
                           disabled={isSubmitting}
                         >
@@ -2092,15 +1955,14 @@ export default function HomePage() {
                               type="button"
                               className={styles.realismConfirmPrimary}
                               onClick={() => {
-                                setConfirmBeforeProceed({
-                                  intentionToSend: realismPending.intentionToSend,
-                                  originalIntent: lastSubmittedIntent || realismPending.intentionToSend,
+                                startPendingMission({
                                   ritualId: realismPending.ritualId,
+                                  intention: realismPending.intentionToSend,
                                   days: realismPending.days,
+                                  locale,
                                   category: realismPending.category,
                                 });
                                 setRealismPending(null);
-                                setIntention('');
                               }}
                               disabled={isSubmitting}
                             >
@@ -2129,15 +1991,14 @@ export default function HomePage() {
                               type="button"
                               className={realismPending.needsConfirmation && showConfirmationAdjustments ? styles.realismConfirmSecondary : styles.realismKeepButton}
                               onClick={() => {
-                                setConfirmBeforeProceed({
-                                  intentionToSend: realismPending.intentionToSend,
-                                  originalIntent: lastSubmittedIntent || realismPending.intentionToSend,
+                                startPendingMission({
                                   ritualId: realismPending.ritualId,
+                                  intention: realismPending.intentionToSend,
                                   days: realismPending.days,
+                                  locale,
                                   category: realismPending.category,
                                 });
                                 setRealismPending(null);
-                                setIntention('');
                               }}
                               disabled={isSubmitting}
                             >
@@ -2162,15 +2023,14 @@ export default function HomePage() {
                                         type="button"
                                         className={styles.realismAdjustButton}
                                         onClick={() => {
-                                          setConfirmBeforeProceed({
-                                            intentionToSend: intention,
-                                            originalIntent: lastSubmittedIntent || realismPending.intentionToSend,
+                                          startPendingMission({
                                             ritualId: realismPending.ritualId,
+                                            intention,
                                             days,
+                                            locale,
                                             category: realismPending.category,
                                           });
                                           setRealismPending(null);
-                                          setIntention('');
                                         }}
                                         disabled={isSubmitting}
                                       >
@@ -2212,17 +2072,17 @@ export default function HomePage() {
                                 type="button"
                                 className={styles.suggestedRephraseButton}
                                 onClick={() => {
-                                setIntention(rewrite.next_intent);
-                                setSuggestedRephraseDbg(null, 'user:useSuggestion');
-                                setInlineHintDbg(null, 'user:useSuggestion');
-                                const ritualId = lastRitualId ?? createRitualId();
-                                setLastRitualId(ritualId);
-                                setConfirmBeforeProceed({
-                                  intentionToSend: rewrite.next_intent,
-                                  originalIntent: rewrite.next_intent,
-                                  ritualId,
-                                  days: finalDays,
-                                });
+                                  setIntention(rewrite.next_intent);
+                                  setSuggestedRephraseDbg(null, 'user:useSuggestion');
+                                  setInlineHintDbg(null, 'user:useSuggestion');
+                                  const ritualId = lastRitualId ?? createRitualId();
+                                  setLastRitualId(ritualId);
+                                  startPendingMission({
+                                    ritualId,
+                                    intention: rewrite.next_intent,
+                                    days: finalDays,
+                                    locale,
+                                  });
                                 }}
                               >
                                 {rewrite.label}
@@ -2248,17 +2108,17 @@ export default function HomePage() {
                               type="button"
                               className={styles.suggestedRephraseButton}
                               onClick={() => {
-                              setIntention(suggestedRephrase);
-                              setSuggestedRephraseDbg(null, 'user:useSuggestion');
-                              setInlineHintDbg(null, 'user:useSuggestion');
-                              const ritualId = lastRitualId ?? createRitualId();
-                              setLastRitualId(ritualId);
-                              setConfirmBeforeProceed({
-                                intentionToSend: suggestedRephrase,
-                                originalIntent: suggestedRephrase,
-                                ritualId,
-                                days: finalDays,
-                              });
+                                setIntention(suggestedRephrase);
+                                setSuggestedRephraseDbg(null, 'user:useSuggestion');
+                                setInlineHintDbg(null, 'user:useSuggestion');
+                                const ritualId = lastRitualId ?? createRitualId();
+                                setLastRitualId(ritualId);
+                                startPendingMission({
+                                  ritualId,
+                                  intention: suggestedRephrase,
+                                  days: finalDays,
+                                  locale,
+                                });
                               }}
                             >
                               {suggestedRephrase}
@@ -2399,6 +2259,8 @@ export default function HomePage() {
               <a href="/admin/lexicon">Language Packs</a>
               {' · '}
               <a href="/admin/idea-routines">Suggestions rituels</a>
+              {' · '}
+              <a href="/admin/routine-generation">Génération de la routine</a>
               {' · '}
               <a href="/admin/llm">LLM Playground</a>
               {' · '}

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   buildInitialProgress,
   createSampleMissions_basic,
@@ -26,6 +26,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useI18n } from '../components/I18nProvider';
 import { getMissionIndex } from '../lib/images/missionIndex';
 import { purgeStaleMissionContent } from '../lib/storage/purge';
+import { buildMissionUrl } from '../lib/missionUrl';
 
 const nowISO = () => new Date().toISOString();
 
@@ -110,9 +111,14 @@ const toLegacyBlueprint = (path: LearningPath): LearningPathBlueprintV2 => ({
   })),
 });
 
-export default function MissionDashboard() {
+type MissionDashboardProps = {
+  preparing?: boolean;
+  preparingStatus?: 'pending' | 'ready' | 'error';
+};
+
+export default function MissionDashboard({ preparing, preparingStatus }: MissionDashboardProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [hashParams, setHashParams] = useState<{ stepId?: string | null; mode?: string | null }>({});
   const { t, locale } = useI18n();
   const [path, setPath] = useState<LearningPathState>(() =>
     recomputeStates(createSamplePath_3levels_3_4_3()),
@@ -130,8 +136,6 @@ export default function MissionDashboard() {
   const [activeStep, setActiveStep] = useState<StepRef>(null);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [autoStarted, setAutoStarted] = useState(false);
-  const [showReady, setShowReady] = useState(false);
   const [loadingMissions, setLoadingMissions] = useState(false);
   const [missionError, setMissionError] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -142,18 +146,50 @@ export default function MissionDashboard() {
     returnedStepId?: string;
   } | null>(null);
   const [outcomeError, setOutcomeError] = useState<string | null>(null);
-  const modeParam = searchParams.get('mode');
-  const requestedStepParam = searchParams.get('stepId');
-  const isManualMode = modeParam === 'manual';
+  const requestedStepParam = hashParams.stepId ?? null;
+  const isManualMode = (hashParams.mode ?? null) === 'manual';
   const [lastProgressByMissionId, setLastProgressByMissionId] = useState<
     Record<string, { outcome: string }>
   >({});
+  const deepLinkHandledRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const parseHash = () => {
+      const raw = window.location.hash.replace(/^#/, '');
+      if (!raw) {
+        setHashParams({});
+        return;
+      }
+      const params = new URLSearchParams(raw);
+      const step = params.get('step');
+      const mode = params.get('mode');
+      setHashParams({ stepId: step, mode });
+    };
+    parseHash();
+    window.addEventListener('hashchange', parseHash);
+    return () => window.removeEventListener('hashchange', parseHash);
+  }, []);
 
   const [ritual, setRitual] = useLocalStorage<RitualSnapshot | null>('loe.ritual', null);
   const [missionData, setMissionData] = useLocalStorage<MissionData | null>(
     'loe.missionData',
     null,
   );
+  const totalStepsCount = path.blueprint.levels.reduce((acc, level) => acc + level.steps.length, 0);
+  const buildCurrentMissionUrl = (opts?: { stepId?: string | null; mode?: string | null }) => {
+    const ritualId = ritual?.ritualId ?? missionData?.ritualId ?? '';
+    if (!ritualId) return '/';
+    const intention = ritual?.intention ?? missionData?.sourcePath?.pathTitle ?? t.missionTitle;
+    const days = (ritual?.days ?? totalStepsCount) || 21;
+    return buildMissionUrl({
+      ritualId,
+      intention,
+      days,
+      stepId: opts?.stepId ?? null,
+      mode: opts?.mode ?? null,
+    });
+  };
   const stepOrder = useMemo(
     () =>
       path.blueprint.levels.flatMap((level) =>
@@ -174,6 +210,7 @@ export default function MissionDashboard() {
   );
 
   const nextAvailableStep = useMemo(() => getNextAvailableStep(path), [path]);
+
 
   const missionsById = useMemo(
     () => new Map(missions.map((mission) => [mission.id, mission])),
@@ -196,28 +233,6 @@ export default function MissionDashboard() {
     }
     return 'pending';
   };
-
-  useEffect(() => {
-    const shouldStart = searchParams.get('start') === '1';
-    const isReady = searchParams.get('ready') === '1';
-    if (!shouldStart || autoStarted) {
-      if (isReady) {
-        setShowReady(true);
-        router.replace('/mission');
-      }
-      return;
-    }
-    const shouldWaitForData = Boolean(ritual) && (!missionData || !isHydrated) && !missionError;
-    if (shouldWaitForData) {
-      return;
-    }
-    const next = getNextAvailableStep(path);
-    if (next) {
-      openStep(next.levelId, next.stepId);
-      setAutoStarted(true);
-      router.replace('/mission');
-    }
-  }, [autoStarted, isHydrated, missionData, missionError, path, ritual, router, searchParams]);
 
   useEffect(() => {
     if (!missionData || isHydrated) {
@@ -618,10 +633,65 @@ export default function MissionDashboard() {
     }
     const missionId = selectedMissionId;
     if (ritual?.ritualId) {
-      router.replace(`/mission?ritualId=${ritual.ritualId}&stepId=${stepId}&mode=manual`);
+      const url = buildCurrentMissionUrl({ stepId, mode: 'manual' });
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', url);
+      } else {
+        router.replace(url);
+      }
     }
     void ensureMissionReady(missionId, { mode: 'manual', requestedStepId: stepId });
   };
+
+  useEffect(() => {
+    if (!requestedStepParam) return;
+    const deepLinkKey = `${requestedStepParam}:${isManualMode ? 'manual' : 'auto'}`;
+    if (deepLinkHandledRef.current === deepLinkKey) return;
+    deepLinkHandledRef.current = deepLinkKey;
+
+    const requestedIndex = stepOrder.findIndex((entry) => entry.stepId === requestedStepParam);
+    if (requestedIndex === -1) {
+      return;
+    }
+    if (activeStep?.stepId === requestedStepParam) {
+      return;
+    }
+    const level = path.blueprint.levels.find((item) =>
+      item.steps.some((step) => step.id === requestedStepParam),
+    );
+    const step = level?.steps.find((item) => item.id === requestedStepParam);
+    if (!level || !step) {
+      return;
+    }
+    const levelIndex = path.blueprint.levels.findIndex((item) => item.id === level.id);
+    const stepIndex = level.steps.findIndex((item) => item.id === requestedStepParam);
+    const progressStep = path.progress.levels?.[levelIndex]?.steps?.[stepIndex];
+    const isCompleted = progressStep?.state === 'completed';
+    const nextIndex = nextAvailableStep
+      ? stepOrder.findIndex((entry) => entry.stepId === nextAvailableStep.stepId)
+      : -1;
+    const isAccessible = isCompleted || (nextIndex >= 0 && requestedIndex <= nextIndex);
+
+    if (!isAccessible) {
+      const label = nextIndex >= 0 ? nextIndex + 1 : 1;
+      window.dispatchEvent(
+        new CustomEvent('loe:mission:toast', {
+          detail: { message: `Terminer l’étape ${label} pour débloquer` },
+        }),
+      );
+      return;
+    }
+
+    openStep(level.id, step.id);
+  }, [
+    activeStep?.stepId,
+    isManualMode,
+    nextAvailableStep,
+    path.blueprint.levels,
+    path.progress.levels,
+    requestedStepParam,
+    stepOrder,
+  ]);
 
   const handleComplete = (result?: { score?: number }) => {
     if (!activeStep) {
@@ -850,7 +920,6 @@ export default function MissionDashboard() {
 
   return (
     <section className="mission-shell">
-      {showReady && <div className="ritual-ready">{t.missionReady}</div>}
       {loadingMissions && <div className="ritual-ready">{t.missionGenerating}</div>}
       {missionError && <div className="ritual-ready">{t.missionGenerateError}</div>}
 
@@ -862,6 +931,8 @@ export default function MissionDashboard() {
         completedCount={completedCount}
         totalCount={totalCount}
         currentStepTitle={currentStepTitle ?? null}
+        preparing={preparing}
+        preparingStatus={preparingStatus}
         onStepClick={openStep}
         onOpenNotifications={() => setShowNotifications(true)}
         onCloseMission={() => router.replace('/')}

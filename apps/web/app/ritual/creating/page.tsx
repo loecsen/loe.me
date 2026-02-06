@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { buildMissionUrl } from '../../lib/missionUrl';
+import { setRitualIdMapEntry } from '../../lib/rituals/inProgress';
 
 const PENDING_REQUEST_KEY = 'loe.pending_ritual_request';
 
@@ -18,9 +20,16 @@ export default function RitualCreatingPage() {
       return;
     }
     try {
-      const pending = JSON.parse(raw) as { ritualId?: string };
+      const pending = JSON.parse(raw) as { ritualId?: string; intention?: string; days?: number };
       if (pending?.ritualId) {
-        router.replace(`/mission?creating=1&ritualId=${pending.ritualId}`);
+        setRitualIdMapEntry(pending.ritualId);
+        router.replace(
+          buildMissionUrl({
+            ritualId: pending.ritualId,
+            intention: pending.intention ?? 'Ta routine',
+            days: pending.days ?? 21,
+          }),
+        );
         return;
       }
     } catch {

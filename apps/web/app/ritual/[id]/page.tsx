@@ -26,6 +26,8 @@ import {
   type RitualIndexItem,
   type RitualRecord,
 } from '../../lib/rituals/inProgress';
+import { buildMissionUrl } from '../../lib/missionUrl';
+import { setRitualIdMapEntry } from '../../lib/rituals/inProgress';
 
 type MissionEntry = MissionStub & {
   blocks?: MissionFull['blocks'];
@@ -760,7 +762,14 @@ export default function RitualPage() {
         // ignore write errors
       }
     }
-    router.push('/mission?start=1&ready=1');
+    setRitualIdMapEntry(record.ritualId);
+    router.push(
+      buildMissionUrl({
+        ritualId: record.ritualId,
+        intention: record.intention,
+        days: record.days,
+      }),
+    );
   };
 
   const handleRetry = () => {

@@ -40,22 +40,28 @@
   width: 100vw;
   height: 100vh;
   z-index: 0;
+  overflow: hidden;
 }
 
-.backgroundImg {
+.bg {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.5;
-  transition: opacity 0.7s ease-in-out;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 800ms ease-in-out;
+  will-change: opacity;
+}
+
+.bgOn {
+  opacity: 1;
 }
 
 .backgroundOverlay {
   position: absolute;
   inset: 0;
   background: transparent;
+  pointer-events: none;
 }
 
 .header {
@@ -70,7 +76,10 @@
   justify-content: center;
   gap: 8px;
   padding: 12px 16px 10px;
-  background: rgba(23, 28, 38, 0.9);
+  background: transparent;
+  isolation: isolate;
+  backdrop-filter: blur(17px);
+  -webkit-backdrop-filter: blur(17px);
 }
 
 .headerRow {
@@ -83,6 +92,65 @@
 .headerRowBottom {
   display: flex;
   align-items: center;
+}
+
+.preparingCard {
+  margin: 10px 16px 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  color: #111827;
+}
+
+.preparingTitle {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.preparingSubtitle {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.preparingSteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-size: 12px;
+  color: #111827;
+}
+
+.preparingStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+}
+
+.preparingStepActive {
+  color: #111827;
+  font-weight: 600;
+}
+
+.preparingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.preparingStepActive .preparingDot {
+  background: #7b56ff;
+  box-shadow: 0 0 0 4px rgba(123, 86, 255, 0.15);
+}
+
+.preparingError {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #b91c1c;
 }
 
 .headerIdentity {
@@ -117,7 +185,6 @@
   font-size: 15px;
   font-weight: 700;
   color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -137,14 +204,12 @@
   font-size: 12px;
   font-weight: 700;
   color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .statIcon {
   width: 16px;
   height: 16px;
   color: white;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
 .statValue {
@@ -154,7 +219,6 @@
 .statText {
   font-size: 12px;
   color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .topActions {
@@ -174,7 +238,6 @@
   place-items: center;
   cursor: pointer;
   transition: transform 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .iconButton:hover {
@@ -241,9 +304,32 @@
   margin: 0 auto;
 }
 
+.pathWrapper {
+  position: relative;
+  min-height: 100%;
+}
+
 .pathContainer {
   position: relative;
   padding: 0 16px;
+}
+
+.pathLine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.pathLine path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 5px;
+  stroke-dasharray: 10 10;
+  stroke-linecap: round;
 }
 
 .marker {
@@ -261,6 +347,8 @@
   font-family: 'Poppins', sans-serif;
   font-weight: 700;
   font-size: 14px;
+  position: relative;
+  z-index: 2;
 }
 
 .markerIcon {
@@ -277,7 +365,32 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  background-color: rgba(23, 28, 38, 0.9);
+  background: transparent;
+  isolation: isolate;
+  backdrop-filter: blur(17px);
+  -webkit-backdrop-filter: blur(17px);
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(181deg, var(--bar-gradient-top-start), var(--bar-gradient-top-end));
+  z-index: 0;
+}
+
+.bottomBar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(181deg, var(--bar-gradient-bottom-start), var(--bar-gradient-bottom-end));
+  z-index: 0;
+}
+
+.header > *,
+.bottomBar > * {
+  position: relative;
+  z-index: 1;
 }
 
 .bottomNavItem {
@@ -291,14 +404,12 @@
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .bottomNavIcon {
   width: 22px;
   height: 22px;
   color: white;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
 .bottomNavLabel {
@@ -323,6 +434,8 @@
   flex-direction: column;
   align-items: center;
   padding-top: 8px;
+  position: relative;
+  z-index: 1;
 }
 
 .stepRow {
@@ -338,6 +451,7 @@
   position: absolute;
   display: flex;
   align-items: center;
+  z-index: 1;
   gap: 12px;
 }
 
@@ -357,6 +471,16 @@
   flex-shrink: 0;
 }
 
+.stepButton > * {
+  position: relative;
+  z-index: 1;
+}
+
+.stepNumber {
+  display: inline-block;
+  transform: translateY(-4px);
+}
+
 .stepButton:hover {
   transform: scale(1.05);
 }
@@ -372,6 +496,18 @@
   color: white;
   box-shadow: var(--shadow-glow-sakura);
   animation: pulse-glow 2s ease-in-out infinite;
+  overflow: visible;
+}
+
+.stepActive::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid hsla(330, 85%, 65%, 0.7);
+  pointer-events: none;
+  transform-origin: center;
+  animation: pulse-ring 2s ease-out infinite;
 }
 
 .stepLocked {
@@ -381,29 +517,29 @@
   color: var(--muted-foreground);
 }
 
+.stepLocked svg {
+  stroke: #fff;
+}
+
 .starsContainer {
   position: absolute;
-  bottom: -8px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: 2px;
-  background: var(--card);
-  padding: 2px 6px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
 }
 
 .star {
-  width: 12px;
-  height: 12px;
-  fill: var(--sunset-gold);
+  width: 10px;
+  height: 10px;
+  fill: #fff;
 }
 
 .stepLabel {
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(10, 12, 16, 0);
+  background: rgba(250, 250, 250, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #000;
   font-weight: 700;
@@ -416,19 +552,44 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .stepLabelCompleted {
-  background: rgba(10, 12, 16, 0.28);
+  background: rgba(250, 250, 250, 0.5);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .stepLabelActive {
-  background: rgba(250, 250, 250, 0.3);
+  background: #fff;
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+.stepLabel:hover,
+.stepLabel.stepLabelCompleted:hover,
+.stepLabel.stepLabelActive:hover {
+  background: rgba(250, 250, 250, 1);
+  background-color: rgba(250, 250, 250, 1);
 }
 
 .stepLabelLocked {
   opacity: 0.55;
+}
+
+.stepLabelPlaceholder {
+  min-width: 130px;
+  text-align: center;
+  justify-content: center;
+  animation: placeholderPulse 2s ease-in-out infinite;
+}
+
+@keyframes placeholderPulse {
+  0%, 100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .minimap {
@@ -510,6 +671,17 @@
 .toastVisible {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
 }
 
 @keyframes pulse-glow {

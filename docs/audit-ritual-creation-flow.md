@@ -20,7 +20,7 @@
 
 3. **Après succès de missions/generate**  
    - Home écrit en **sessionStorage** : `loe.pending_ritual_request` (ritualId, intention, days, locale), `loe.pending_ritual_result` (payload avec path, missionStubs, etc.).  
-   - Redirection vers `/mission?creating=1&ritualId=<id>`.
+  - Redirection vers `/mission/<slug>-<shortId>?ritualId=<id>`.
 
 4. **Page Mission** (`apps/web/app/mission/page.tsx`) avec `creating=1`  
    - Lit `PENDING_RESULT_KEY` et `PENDING_REQUEST_KEY` en sessionStorage.  

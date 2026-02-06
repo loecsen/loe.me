@@ -17,6 +17,7 @@ import {
   getDataPath,
   getDataRoot,
   fileExists,
+  readJson,
 } from '../../../lib/storage/fsStore';
 import { buildMissionFull, generateMissionBlocks } from '../../../lib/missions/generateMissionBlocks';
 import { loadOverrides, resolvePlaybooks, validatePlaybooks } from '../../../lib/domains/resolver';
@@ -36,6 +37,12 @@ import { runRealismGate } from '../../../lib/realism/realismGate';
 import { categoryRequiresFeasibility } from '../../../lib/category';
 import { getSiteLlmClientForTier } from '../../../lib/llm/router';
 import { normalizeRitualPlan } from '../../../lib/rituals/normalizeRitualPlan';
+import {
+  acquireRitualLock,
+  releaseRitualLock,
+  writeRitualStatus,
+  getRitualPath,
+} from '../../../lib/rituals/statusStore';
 
 export const runtime = 'nodejs';
 
@@ -427,8 +434,10 @@ const validatePayload = (payload: RawPayload) => {
 };
 
 export async function POST(request: Request) {
+  let lockHeld = false;
+  let lockedRitualId = '';
   try {
-    const { intention, days, locale, clarification, ritualId: requestedRitualId, normalized_intent, category: requestCategory, realism_acknowledged, goal_clarification } =
+    const { intention, days, locale, clarification, ritualId: requestedRitualId, normalized_intent, category: requestCategory, realism_acknowledged, goal_clarification, skip_gates } =
       (await request.json()) as {
       intention?: string;
       days?: number;
@@ -438,6 +447,7 @@ export async function POST(request: Request) {
       category?: string;
       realism_acknowledged?: boolean;
       goal_clarification?: GoalClarification;
+      skip_gates?: boolean;
       clarification?: {
         originalIntention: string;
         chosenLabel: string;
@@ -451,6 +461,36 @@ export async function POST(request: Request) {
       typeof requestCategory === 'string' && ['LEARN', 'CREATE', 'PERFORM', 'WELLBEING', 'SOCIAL', 'CHALLENGE'].includes(requestCategory)
         ? requestCategory
         : undefined;
+
+    const ritualId =
+      typeof requestedRitualId === 'string' && requestedRitualId.trim().length > 0
+        ? requestedRitualId.trim()
+        : randomUUID();
+    lockedRitualId = ritualId;
+    const ritualPath = getRitualPath(ritualId);
+    if (await fileExists(ritualPath)) {
+      const ritual = await readJson<{
+        ritualId: string;
+        path?: RawPayload['path'];
+        missionStubs?: RawPayload['missionStubs'];
+        missionsById?: Record<string, MissionFull>;
+        category?: string;
+        audience_safety_level?: AudienceSafetyLevel;
+        debugMeta?: Record<string, unknown>;
+      }>(ritualPath);
+      return NextResponse.json({
+        data: {
+          ritualId: ritual.ritualId ?? ritualId,
+          path: ritual.path,
+          missionStubs: ritual.missionStubs,
+          missions: ritual.missionsById ? Object.values(ritual.missionsById) : [],
+          category: ritual.category ?? undefined,
+          audience_safety_level: ritual.audience_safety_level,
+          debugMeta: ritual.debugMeta,
+        },
+      });
+    }
+
 
     const safeDays =
       typeof days === 'number' && Number.isFinite(days) ? Math.max(Math.floor(days), 7) : 21;
@@ -478,7 +518,12 @@ export async function POST(request: Request) {
       days: safeDays,
       locale: resolvedLocale,
     });
-    if (rawIntention.length > 350) {
+    const skipGates =
+      skip_gates === true || request.headers.get('x-loe-source') === 'mission';
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[missions.generate] skip_gates', { ritualId, skip_gates, skipGates });
+    }
+    if (rawIntention.length > 350 && !skipGates) {
       return NextResponse.json({
         needsClarification: true,
         clarification: { mode: 'inline', reason_code: 'too_long' },
@@ -548,7 +593,7 @@ export async function POST(request: Request) {
         });
       }
     }
-    if (actionabilityResult.action !== 'actionable') {
+    if (!skipGates && actionabilityResult.action !== 'actionable') {
       return NextResponse.json({
         data: {
           needsClarification: true,
@@ -565,119 +610,123 @@ export async function POST(request: Request) {
       });
     }
 
-    const { guard: lexiconGuard } = await getLexiconGuard();
-    const safetyVerdict = await runSafetyV2({
-      text: rawIntention,
-      locale: resolvedLocale,
-      lexiconGuard,
-      trace,
-    });
-    if (safetyVerdict.status === 'blocked') {
-      if (debugEnabled) {
-        console.warn('[safety] blocked', {
-          reason_code: safetyVerdict.reason_code,
-          intentionExcerpt: rawIntention.slice(0, 120),
-        });
-      }
-      return NextResponse.json({
-        blocked: true,
-        block_reason: safetyVerdict.reason_code,
-        clarification: { mode: 'inline', type: 'safety' },
-        debug: { safety: { reason_code: safetyVerdict.reason_code } },
-        ...(debugEnabled ? { debugTrace: trace } : {}),
+    let safeIntention = safeText(rawIntention, 'Apprendre avec constance');
+    if (!skipGates) {
+      const { guard: lexiconGuard } = await getLexiconGuard();
+      const safetyVerdict = await runSafetyV2({
+        text: rawIntention,
+        locale: resolvedLocale,
+        lexiconGuard,
+        trace,
       });
-    }
-
-    const gate = runSafetyGate(rawIntention, resolvedLocale);
-    if (gate.status === 'needs_clarification') {
-      pushTrace(trace, {
-        gate: 'safety_gate',
-        outcome: 'needs_clarification',
-        reason_code: gate.reasonCode,
-        meta: { source: 'safety_gate' },
-      });
-      return NextResponse.json({
-        data: {
-          needsClarification: true,
-          clarification: { mode: 'inline', reason_code: gate.reasonCode },
-          debug: {},
-        },
-        ...(debugEnabled ? { debugTrace: trace } : {}),
-      });
-    }
-
-    const safeIntention = safeText(gate.cleanIntention ?? rawIntention, 'Apprendre avec constance');
-
-    // Audience safety: DB lookup first, else classify + upsert. Blocked => no generation.
-    let audienceSafetyLevel: AudienceSafetyLevel = 'all_ages';
-    try {
-      const store = getDecisionStore();
-      const { unique_key, context_hash } = buildDecisionUniqueKey({
-        intent: rawIntention,
-        intent_lang: resolvedLocale,
-        category: null,
-        days: safeDays,
-        gate: 'audience_safety',
-        context_flags: { requires_feasibility: false },
-      });
-      const record = await store.getByUniqueKey(unique_key, context_hash);
-      if (record && isRecordFresh(record.updated_at, 'audience_safety', record.verdict)) {
-        audienceSafetyLevel = (record.gates?.audience_safety as AudienceSafetyLevel) ?? 'all_ages';
-      } else {
-        const baseUrl = typeof request.url === 'string' ? new URL(request.url).origin : '';
-        const result = await assessAudienceSafety(rawIntention, resolvedLocale, resolvedLocale, baseUrl
-          ? async (body) => {
-              const res = await fetch(`${baseUrl}/api/audience-safety/classify`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-              });
-              return res.json() as Promise<{ level: AudienceSafetyLevel; reason_code?: string; confidence?: number; notes_short?: string }>;
-            }
-          : undefined);
-        audienceSafetyLevel = result.level;
-        if (baseUrl && result) {
-          try {
-            await fetch(`${baseUrl}/api/db/decision/upsert-from-audience-safety`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                intent: rawIntention,
-                intent_lang: resolvedLocale,
-                ui_locale: resolvedLocale,
-                days: safeDays,
-                level: result.level,
-                reason_code: result.reason_code,
-                confidence: result.confidence,
-                notes_short: result.notes_short,
-              }),
-            });
-          } catch {
-            /* best-effort */
-          }
-        }
-      }
-      if (audienceSafetyLevel === 'blocked') {
+      if (safetyVerdict.status === 'blocked') {
         if (debugEnabled) {
-          console.warn('[audience_safety] blocked', { intentionExcerpt: rawIntention.slice(0, 80) });
+          console.warn('[safety] blocked', {
+            reason_code: safetyVerdict.reason_code,
+            intentionExcerpt: rawIntention.slice(0, 120),
+          });
         }
         return NextResponse.json({
           blocked: true,
-          block_reason: 'audience_safety',
+          block_reason: safetyVerdict.reason_code,
           clarification: { mode: 'inline', type: 'safety' },
-          debug: { audience_safety: 'blocked' },
+          debug: { safety: { reason_code: safetyVerdict.reason_code } },
           ...(debugEnabled ? { debugTrace: trace } : {}),
         });
       }
-    } catch (err) {
-      if (process.env.NODE_ENV !== 'production' && err instanceof Error) {
-        console.warn('[audience_safety]', err.message);
+
+      const gate = runSafetyGate(rawIntention, resolvedLocale);
+      if (gate.status === 'needs_clarification') {
+        pushTrace(trace, {
+          gate: 'safety_gate',
+          outcome: 'needs_clarification',
+          reason_code: gate.reasonCode,
+          meta: { source: 'safety_gate' },
+        });
+        return NextResponse.json({
+          data: {
+            needsClarification: true,
+            clarification: { mode: 'inline', reason_code: gate.reasonCode },
+            debug: {},
+          },
+          ...(debugEnabled ? { debugTrace: trace } : {}),
+        });
       }
-      audienceSafetyLevel = 'all_ages';
+      safeIntention = safeText(gate.cleanIntention ?? rawIntention, 'Apprendre avec constance');
+    }
+
+    // Audience safety: DB lookup first, else classify + upsert. Blocked => no generation.
+    let audienceSafetyLevel: AudienceSafetyLevel = 'all_ages';
+    if (!skipGates) {
+      try {
+        const store = getDecisionStore();
+        const { unique_key, context_hash } = buildDecisionUniqueKey({
+          intent: rawIntention,
+          intent_lang: resolvedLocale,
+          category: null,
+          days: safeDays,
+          gate: 'audience_safety',
+          context_flags: { requires_feasibility: false },
+        });
+        const record = await store.getByUniqueKey(unique_key, context_hash);
+        if (record && isRecordFresh(record.updated_at, 'audience_safety', record.verdict)) {
+          audienceSafetyLevel = (record.gates?.audience_safety as AudienceSafetyLevel) ?? 'all_ages';
+        } else {
+          const baseUrl = typeof request.url === 'string' ? new URL(request.url).origin : '';
+          const result = await assessAudienceSafety(rawIntention, resolvedLocale, resolvedLocale, baseUrl
+            ? async (body) => {
+                const res = await fetch(`${baseUrl}/api/audience-safety/classify`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(body),
+                });
+                return res.json() as Promise<{ level: AudienceSafetyLevel; reason_code?: string; confidence?: number; notes_short?: string }>;
+              }
+            : undefined);
+          audienceSafetyLevel = result.level;
+          if (baseUrl && result) {
+            try {
+              await fetch(`${baseUrl}/api/db/decision/upsert-from-audience-safety`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  intent: rawIntention,
+                  intent_lang: resolvedLocale,
+                  ui_locale: resolvedLocale,
+                  days: safeDays,
+                  level: result.level,
+                  reason_code: result.reason_code,
+                  confidence: result.confidence,
+                  notes_short: result.notes_short,
+                }),
+              });
+            } catch {
+              /* best-effort */
+            }
+          }
+        }
+        if (audienceSafetyLevel === 'blocked') {
+          if (debugEnabled) {
+            console.warn('[audience_safety] blocked', { intentionExcerpt: rawIntention.slice(0, 80) });
+          }
+          return NextResponse.json({
+            blocked: true,
+            block_reason: 'audience_safety',
+            clarification: { mode: 'inline', type: 'safety' },
+            debug: { audience_safety: 'blocked' },
+            ...(debugEnabled ? { debugTrace: trace } : {}),
+          });
+        }
+      } catch (err) {
+        if (process.env.NODE_ENV !== 'production' && err instanceof Error) {
+          console.warn('[audience_safety]', err.message);
+        }
+        audienceSafetyLevel = 'all_ages';
+      }
     }
 
     const runRealismForCategory = resolvedCategory != null ? categoryRequiresFeasibility(resolvedCategory as import('../../../lib/category').Category) : true;
-    if (runRealismForCategory && !realism_acknowledged) {
+    if (!skipGates && runRealismForCategory && !realism_acknowledged) {
       const realismGate = runRealismGate(
         safeIntention,
         typeof days === 'number' && Number.isFinite(days) ? days : undefined,
@@ -703,7 +752,7 @@ export async function POST(request: Request) {
         gate: 'realism_gate',
         outcome: 'ok',
       });
-    } else if (runRealismForCategory && realism_acknowledged && debugEnabled && trace) {
+    } else if (!skipGates && runRealismForCategory && realism_acknowledged && debugEnabled && trace) {
       pushTrace(trace, {
         gate: 'realism_gate_v2_soft',
         outcome: 'acknowledged',
@@ -955,7 +1004,14 @@ export async function POST(request: Request) {
     }
   };
 
-  const totalStart = Date.now();
+    const lockAcquired = await acquireRitualLock(ritualId);
+    if (!lockAcquired) {
+      return NextResponse.json({ error: 'generation_in_progress' }, { status: 409 });
+    }
+    lockHeld = true;
+    await writeRitualStatus(ritualId, 'pending');
+
+    const totalStart = Date.now();
   let parsed: { path: LearningPath; missionStubs: MissionStub[] } | null = null;
   let planMeta: { promptHash: string; promptVersion: string; latencyMs: number } | null = null;
   let planWarnings: string[] | undefined;
@@ -1153,10 +1209,6 @@ export async function POST(request: Request) {
     [firstMissionFull.id]: firstMissionFull,
   };
 
-  const ritualId =
-    typeof requestedRitualId === 'string' && requestedRitualId.trim().length > 0
-      ? requestedRitualId.trim()
-      : randomUUID();
   const createdAt = new Date().toISOString();
   const ritualRecord = {
     schemaVersion: 1,
@@ -1184,7 +1236,6 @@ export async function POST(request: Request) {
       axisMapped: axisMappings,
     },
   };
-  const ritualPath = getDataPath('rituals', `ritual_${ritualId}.json`);
   await writeJsonAtomic(ritualPath, ritualRecord);
   const existsAfterWrite = await fileExists(ritualPath);
   if (process.env.NODE_ENV !== 'production') {
@@ -1228,6 +1279,7 @@ export async function POST(request: Request) {
       firstFullId: firstMissionFull.id,
     });
   }
+  await writeRitualStatus(ritualId, 'ready');
   return NextResponse.json({
     data: {
       ritualId,
@@ -1254,10 +1306,21 @@ export async function POST(request: Request) {
   });
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
+    if (lockedRitualId) {
+      try {
+        await writeRitualStatus(lockedRitualId, 'pending', details);
+      } catch {
+        // ignore
+      }
+    }
     if (process.env.NODE_ENV !== 'production') {
       console.error('[missions.generate] server_error', details);
       return NextResponse.json({ error: 'server_error', details }, { status: 500 });
     }
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
+  } finally {
+    if (lockHeld && lockedRitualId) {
+      await releaseRitualLock(lockedRitualId);
+    }
   }
 }

@@ -1,3 +1,5 @@
+import { buildShortId } from '../slugify';
+
 export type RitualStatus = 'generating' | 'ready' | 'error' | 'completed';
 
 export type RitualCategory =
@@ -99,4 +101,26 @@ export function setRitualIdMap(map: Record<string, string>): void {
   } catch {
     // ignore storage errors
   }
+}
+
+export function setRitualIdMapEntry(ritualId: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    const shortId = buildShortId(ritualId);
+    const current = getRitualIdMap();
+    if (current[shortId] === ritualId) return;
+    setRitualIdMap({ ...current, [shortId]: ritualId });
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getRitualIdByShortId(shortId: string): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const map = getRitualIdMap();
+  return map[shortId] ?? null;
 }
